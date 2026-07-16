@@ -1,7 +1,15 @@
 + ++ +=
 - -- -= ->
 * *=
-/ /=
+/ /=// Comment
+    // Another comment
+
+/* 
+Multi
+line
+comment
+*/ // Comment
+
 % %=
 = ==
 ! !=

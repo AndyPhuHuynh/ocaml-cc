@@ -1,3 +1,5 @@
+type invalid = UnterminatedComment | UnterminatedString
+
 type kind =
   (* Keywords *)
   | Auto
@@ -92,6 +94,7 @@ type kind =
   | Period
   | Question
   | Eof
+  | Invalid of invalid
 
 type t = { kind : kind; line : int; col : int }
 

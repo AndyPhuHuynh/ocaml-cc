@@ -1,3 +1,5 @@
+type invalid = UnterminatedComment | UnterminatedString
+
 type kind =
   (* Keywords *)
   | Auto
@@ -92,6 +94,7 @@ type kind =
   | Period
   | Question
   | Eof
+  | Invalid of invalid
 
 type t = { kind : kind; line : int; col : int }
 
@@ -189,6 +192,10 @@ let kind_to_string = function
   | Period -> "Period"
   | Question -> "Question"
   | Eof -> "EOF"
+  | Invalid invalid -> (
+      match invalid with
+      | UnterminatedComment -> "Unterminated multi-line comment"
+      | UnterminatedString -> "Unterminated string")
 
 let to_string token =
   Printf.sprintf "(%s, %d:%d)" (kind_to_string token.kind) token.line token.col

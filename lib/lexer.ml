@@ -6,6 +6,11 @@ let is_at_end (lexer : t) : bool = lexer.position >= String.length lexer.source
 let peek_char (lexer : t) : char option =
   if is_at_end lexer then None else Some lexer.source.[lexer.position]
 
+let get_prev_lc (lexer : t) = (lexer.line, lexer.col - 1)
+
+let make_token (kind : Token.kind) ((line, col) : int * int) : Token.t =
+  { kind; line; col }
+
 let advance_char (lexer : t) : t =
   match peek_char lexer with
   | Some '\n' ->
@@ -17,16 +22,37 @@ let advance_char (lexer : t) : t =
       }
   | _ -> { lexer with position = lexer.position + 1; col = lexer.col + 1 }
 
-let rec skip_whitespace (lexer : t) =
+let rec skip_single_line_comment (lexer : t) : t * Token.t option =
   match peek_char lexer with
-  | Some ' ' | Some '\t' | Some '\n' | Some '\r' | Some '\012' ->
-      skip_whitespace (advance_char lexer)
-  | _ -> lexer
+  | None -> (lexer, None)
+  | Some '\n' -> skip_whitespace (advance_char lexer)
+  | _ -> skip_single_line_comment (advance_char lexer)
 
-let get_prev_lc (lexer : t) = (lexer.line, lexer.col - 1)
+and skip_multi_line_comment (lexer : t) (start : int * int) : t * Token.t option
+    =
+  match peek_char lexer with
+  | None ->
+      (lexer, Some (make_token (Token.Invalid Token.UnterminatedComment) start))
+  | Some '*' -> begin
+      let next_lexer = advance_char lexer in
+      match peek_char next_lexer with
+      | Some '/' -> skip_whitespace (advance_char next_lexer)
+      | _ -> skip_multi_line_comment (advance_char next_lexer) start
+    end
+  | _ -> skip_multi_line_comment (advance_char lexer) start
 
-let make_token (kind : Token.kind) ((line, col) : int * int) : Token.t =
-  { kind; line; col }
+and skip_whitespace (lexer : t) : t * Token.t option =
+  match peek_char lexer with
+  | Some (' ' | '\t' | '\n' | '\r') -> skip_whitespace (advance_char lexer)
+  | Some '/' -> begin
+      let next_lexer = advance_char lexer in
+      let start = get_prev_lc next_lexer in
+      match peek_char next_lexer with
+      | Some '/' -> skip_single_line_comment (advance_char next_lexer)
+      | Some '*' -> skip_multi_line_comment (advance_char next_lexer) start
+      | _ -> (lexer, None)
+    end
+  | _ -> (lexer, None)
 
 let lex_plus (lexer : t) : Token.t * t =
   let start = get_prev_lc lexer in
@@ -123,40 +149,43 @@ let lex_tilde (lexer : t) : Token.t * t =
   (make_token Token.Tilde start, lexer)
 
 let advance_token lexer =
-  let lexer = skip_whitespace lexer in
-  match peek_char lexer with
-  | None -> (make_token Token.Eof (get_prev_lc lexer), lexer)
-  | Some c -> (
-      let lexer = advance_char lexer in
-      let start = get_prev_lc lexer in
-      match c with
-      (* Operators *)
-      | '+' -> lex_plus lexer
-      | '-' -> lex_minus lexer
-      | '*' -> lex_star lexer
-      | '/' -> lex_slash lexer
-      | '%' -> lex_percent lexer
-      | '=' -> lex_equal lexer
-      | '!' -> lex_bang lexer
-      | '<' -> lex_less lexer
-      | '>' -> lex_greater lexer
-      | '&' -> lex_and lexer
-      | '|' -> lex_or lexer
-      | '^' -> lex_caret lexer
-      | '~' -> lex_tilde lexer
-      (* Punctuation *)
-      | '(' -> (make_token Token.LeftParen start, lexer)
-      | ')' -> (make_token Token.RightParen start, lexer)
-      | '{' -> (make_token Token.LeftBrace start, lexer)
-      | '}' -> (make_token Token.RightBrace start, lexer)
-      | '[' -> (make_token Token.LeftBracket start, lexer)
-      | ']' -> (make_token Token.RightBracket start, lexer)
-      | ':' -> (make_token Token.Colon start, lexer)
-      | ',' -> (make_token Token.Comma start, lexer)
-      | ';' -> (make_token Token.Semicolon start, lexer)
-      | '.' -> (make_token Token.Period start, lexer)
-      | '?' -> (make_token Token.Question start, lexer)
-      | _ -> (make_token Token.Eof start, lexer))
+  let lexer, invalid_token = skip_whitespace lexer in
+  match invalid_token with
+  | Some token -> (token, lexer)
+  | None -> (
+      match peek_char lexer with
+      | None -> (make_token Token.Eof (get_prev_lc lexer), lexer)
+      | Some c -> (
+          let lexer = advance_char lexer in
+          let start = get_prev_lc lexer in
+          match c with
+          (* Operators *)
+          | '+' -> lex_plus lexer
+          | '-' -> lex_minus lexer
+          | '*' -> lex_star lexer
+          | '/' -> lex_slash lexer
+          | '%' -> lex_percent lexer
+          | '=' -> lex_equal lexer
+          | '!' -> lex_bang lexer
+          | '<' -> lex_less lexer
+          | '>' -> lex_greater lexer
+          | '&' -> lex_and lexer
+          | '|' -> lex_or lexer
+          | '^' -> lex_caret lexer
+          | '~' -> lex_tilde lexer
+          (* Punctuation *)
+          | '(' -> (make_token Token.LeftParen start, lexer)
+          | ')' -> (make_token Token.RightParen start, lexer)
+          | '{' -> (make_token Token.LeftBrace start, lexer)
+          | '}' -> (make_token Token.RightBrace start, lexer)
+          | '[' -> (make_token Token.LeftBracket start, lexer)
+          | ']' -> (make_token Token.RightBracket start, lexer)
+          | ':' -> (make_token Token.Colon start, lexer)
+          | ',' -> (make_token Token.Comma start, lexer)
+          | ';' -> (make_token Token.Semicolon start, lexer)
+          | '.' -> (make_token Token.Period start, lexer)
+          | '?' -> (make_token Token.Question start, lexer)
+          | _ -> (make_token Token.Eof start, lexer)))
 
 let tokenize_all source =
   let rec helper lexer acc =
