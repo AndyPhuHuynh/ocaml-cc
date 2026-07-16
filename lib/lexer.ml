@@ -6,13 +6,14 @@ let is_at_end (lexer : t) : bool = lexer.position >= String.length lexer.source
 let peek_char (lexer : t) : char option =
   if is_at_end lexer then None else Some lexer.source.[lexer.position]
 
-let get_prev_lc (lexer : t) = (lexer.line, lexer.col - 1)
+let get_lc (lexer : t) : int * int = (lexer.line, lexer.col)
 
 let make_token (kind : Token.kind) ((line, col) : int * int) : Token.t =
   { kind; line; col }
 
 let advance_char (lexer : t) : t =
   match peek_char lexer with
+  | None -> lexer
   | Some '\n' ->
       {
         lexer with
@@ -45,8 +46,8 @@ and skip_whitespace (lexer : t) : t * Token.t option =
   match peek_char lexer with
   | Some (' ' | '\t' | '\n' | '\r') -> skip_whitespace (advance_char lexer)
   | Some '/' -> begin
+      let start = get_lc lexer in
       let next_lexer = advance_char lexer in
-      let start = get_prev_lc next_lexer in
       match peek_char next_lexer with
       | Some '/' -> skip_single_line_comment (advance_char next_lexer)
       | Some '*' -> skip_multi_line_comment (advance_char next_lexer) start
@@ -54,53 +55,45 @@ and skip_whitespace (lexer : t) : t * Token.t option =
     end
   | _ -> (lexer, None)
 
-let lex_plus (lexer : t) : Token.t * t =
-  let start = get_prev_lc lexer in
+let lex_plus (lexer : t) (start : int * int) : Token.t * t =
   match peek_char lexer with
   | Some '+' -> (make_token Token.PlusPlus start, advance_char lexer)
   | Some '=' -> (make_token Token.PlusEqual start, advance_char lexer)
   | _ -> (make_token Token.Plus start, lexer)
 
-let lex_minus (lexer : t) : Token.t * t =
-  let start = get_prev_lc lexer in
+let lex_minus (lexer : t) (start : int * int) : Token.t * t =
   match peek_char lexer with
   | Some '-' -> (make_token Token.MinusMinus start, advance_char lexer)
   | Some '=' -> (make_token Token.MinusEqual start, advance_char lexer)
   | Some '>' -> (make_token Token.Arrow start, advance_char lexer)
   | _ -> (make_token Token.Minus start, lexer)
 
-let lex_star (lexer : t) : Token.t * t =
-  let start = get_prev_lc lexer in
+let lex_star (lexer : t) (start : int * int) : Token.t * t =
   match peek_char lexer with
   | Some '=' -> (make_token Token.StarEqual start, advance_char lexer)
   | _ -> (make_token Token.Star start, lexer)
 
-let lex_slash (lexer : t) : Token.t * t =
-  let start = get_prev_lc lexer in
+let lex_slash (lexer : t) (start : int * int) : Token.t * t =
   match peek_char lexer with
   | Some '=' -> (make_token Token.SlashEqual start, advance_char lexer)
   | _ -> (make_token Token.Slash start, lexer)
 
-let lex_percent (lexer : t) : Token.t * t =
-  let start = get_prev_lc lexer in
+let lex_percent (lexer : t) (start : int * int) : Token.t * t =
   match peek_char lexer with
   | Some '=' -> (make_token Token.PercentEqual start, advance_char lexer)
   | _ -> (make_token Token.Percent start, lexer)
 
-let lex_equal (lexer : t) : Token.t * t =
-  let start = get_prev_lc lexer in
+let lex_equal (lexer : t) (start : int * int) : Token.t * t =
   match peek_char lexer with
   | Some '=' -> (make_token Token.EqualEqual start, advance_char lexer)
   | _ -> (make_token Token.Equal start, lexer)
 
-let lex_bang (lexer : t) : Token.t * t =
-  let start = get_prev_lc lexer in
+let lex_bang (lexer : t) (start : int * int) : Token.t * t =
   match peek_char lexer with
   | Some '=' -> (make_token Token.BangEqual start, advance_char lexer)
   | _ -> (make_token Token.Bang start, lexer)
 
-let lex_less (lexer : t) : Token.t * t =
-  let start = get_prev_lc lexer in
+let lex_less (lexer : t) (start : int * int) : Token.t * t =
   match peek_char lexer with
   | Some '=' -> (make_token Token.LessEqual start, advance_char lexer)
   | Some '<' -> begin
@@ -111,8 +104,7 @@ let lex_less (lexer : t) : Token.t * t =
     end
   | _ -> (make_token Token.Less start, lexer)
 
-let lex_greater (lexer : t) : Token.t * t =
-  let start = get_prev_lc lexer in
+let lex_greater (lexer : t) (start : int * int) : Token.t * t =
   match peek_char lexer with
   | Some '=' -> (make_token Token.GreaterEqual start, advance_char lexer)
   | Some '>' -> begin
@@ -124,28 +116,24 @@ let lex_greater (lexer : t) : Token.t * t =
     end
   | _ -> (make_token Token.Greater start, lexer)
 
-let lex_and (lexer : t) : Token.t * t =
-  let start = get_prev_lc lexer in
+let lex_and (lexer : t) (start : int * int) : Token.t * t =
   match peek_char lexer with
   | Some '&' -> (make_token Token.AndAnd start, advance_char lexer)
   | Some '=' -> (make_token Token.AndEqual start, advance_char lexer)
   | _ -> (make_token Token.And start, lexer)
 
-let lex_or (lexer : t) : Token.t * t =
-  let start = get_prev_lc lexer in
+let lex_or (lexer : t) (start : int * int) : Token.t * t =
   match peek_char lexer with
   | Some '|' -> (make_token Token.OrOr start, advance_char lexer)
   | Some '=' -> (make_token Token.OrEqual start, advance_char lexer)
   | _ -> (make_token Token.Or start, lexer)
 
-let lex_caret (lexer : t) : Token.t * t =
-  let start = get_prev_lc lexer in
+let lex_caret (lexer : t) (start : int * int) : Token.t * t =
   match peek_char lexer with
   | Some '=' -> (make_token Token.CaretEqual start, advance_char lexer)
   | _ -> (make_token Token.Caret start, lexer)
 
-let lex_tilde (lexer : t) : Token.t * t =
-  let start = get_prev_lc lexer in
+let lex_tilde (lexer : t) (start : int * int) : Token.t * t =
   (make_token Token.Tilde start, lexer)
 
 let advance_token lexer =
@@ -154,25 +142,25 @@ let advance_token lexer =
   | Some token -> (token, lexer)
   | None -> (
       match peek_char lexer with
-      | None -> (make_token Token.Eof (get_prev_lc lexer), lexer)
+      | None -> (make_token Token.Eof (get_lc lexer), lexer)
       | Some c -> (
+          let start = get_lc lexer in
           let lexer = advance_char lexer in
-          let start = get_prev_lc lexer in
           match c with
           (* Operators *)
-          | '+' -> lex_plus lexer
-          | '-' -> lex_minus lexer
-          | '*' -> lex_star lexer
-          | '/' -> lex_slash lexer
-          | '%' -> lex_percent lexer
-          | '=' -> lex_equal lexer
-          | '!' -> lex_bang lexer
-          | '<' -> lex_less lexer
-          | '>' -> lex_greater lexer
-          | '&' -> lex_and lexer
-          | '|' -> lex_or lexer
-          | '^' -> lex_caret lexer
-          | '~' -> lex_tilde lexer
+          | '+' -> lex_plus lexer start
+          | '-' -> lex_minus lexer start
+          | '*' -> lex_star lexer start
+          | '/' -> lex_slash lexer start
+          | '%' -> lex_percent lexer start
+          | '=' -> lex_equal lexer start
+          | '!' -> lex_bang lexer start
+          | '<' -> lex_less lexer start
+          | '>' -> lex_greater lexer start
+          | '&' -> lex_and lexer start
+          | '|' -> lex_or lexer start
+          | '^' -> lex_caret lexer start
+          | '~' -> lex_tilde lexer start
           (* Punctuation *)
           | '(' -> (make_token Token.LeftParen start, lexer)
           | ')' -> (make_token Token.RightParen start, lexer)
