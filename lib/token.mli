@@ -1,4 +1,4 @@
-type t =
+type kind =
   (* Keywords *)
   | Auto
   | Break
@@ -93,4 +93,7 @@ type t =
   | Question
   | Eof
 
+type t = { kind : kind; line : int; col : int }
+
+val kind_to_string : kind -> string
 val to_string : t -> string

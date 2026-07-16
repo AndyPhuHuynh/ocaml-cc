@@ -1,4 +1,4 @@
-type t =
+type kind =
   (* Keywords *)
   | Auto
   | Break
@@ -93,7 +93,9 @@ type t =
   | Question
   | Eof
 
-let to_string = function
+type t = { kind : kind; line : int; col : int }
+
+let kind_to_string = function
   (* Keywords *)
   | Auto -> "auto"
   | Break -> "break"
@@ -187,3 +189,6 @@ let to_string = function
   | Period -> "Period"
   | Question -> "Question"
   | Eof -> "EOF"
+
+let to_string token =
+  Printf.sprintf "(%s, %d:%d)" (kind_to_string token.kind) token.line token.col
