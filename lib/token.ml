@@ -1,4 +1,5 @@
-type invalid = UnterminatedComment | UnterminatedString
+type int_literal = { value : Z.t; suffix : string option }
+type invalid = UnterminatedComment | UnterminatedString | InvalidChar of char
 
 type kind =
   (* Keywords *)
@@ -43,7 +44,7 @@ type kind =
   (* Identifiers and literals *)
   | Identifier of string
   | CharLiteral of char
-  | IntLiteral of int
+  | IntLiteral of int_literal
   | FloatLiteral of float
   | StringLiteral of string
   (* Operators *)
@@ -96,7 +97,8 @@ type kind =
   | Eof
   | Invalid of invalid
 
-type t = { kind : kind; line : int; col : int }
+type span = { start : int; finish : int }
+type t = { kind : kind; span : span; line : int; col : int }
 
 let kind_to_string = function
   (* Keywords *)
@@ -139,11 +141,11 @@ let kind_to_string = function
   | Complex -> "_Complex"
   | Imaginary -> "_Imaginary"
   (* Identifiers and literals *)
-  | Identifier str -> str
-  | CharLiteral c -> String.make 1 c
-  | IntLiteral i -> string_of_int i
-  | FloatLiteral f -> string_of_float f
-  | StringLiteral str -> str
+  | Identifier str -> "Identifier"
+  | CharLiteral c -> "Char Literal"
+  | IntLiteral i -> "Int Literal"
+  | FloatLiteral f -> "Float Literal"
+  | StringLiteral str -> "String Literal"
   (* Operators *)
   | Plus -> "Plus"
   | PlusEqual -> "PlusEqual"
@@ -195,7 +197,20 @@ let kind_to_string = function
   | Invalid invalid -> (
       match invalid with
       | UnterminatedComment -> "Unterminated multi-line comment"
-      | UnterminatedString -> "Unterminated string")
+      | UnterminatedString -> "Unterminated string"
+      | InvalidChar c -> Printf.sprintf "Invalid character '%c'" c)
 
-let to_string token =
-  Printf.sprintf "(%s, %d:%d)" (kind_to_string token.kind) token.line token.col
+let span_to_string span source =
+  String.sub source span.start (span.finish - span.start)
+
+let to_string token source =
+  match token.kind with
+  | Invalid UnterminatedComment | Invalid UnterminatedString | Eof ->
+      Printf.sprintf "([%s], %d:%d)"
+        (kind_to_string token.kind)
+        token.line token.col
+  | _ ->
+      Printf.sprintf "([%s]: [%s], %d:%d)"
+        (kind_to_string token.kind)
+        (span_to_string token.span source)
+        token.line token.col

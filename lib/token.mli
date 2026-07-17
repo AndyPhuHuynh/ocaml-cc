@@ -1,4 +1,5 @@
-type invalid = UnterminatedComment | UnterminatedString
+type int_literal = { value : Z.t; suffix : string option }
+type invalid = UnterminatedComment | UnterminatedString | InvalidChar of char
 
 type kind =
   (* Keywords *)
@@ -43,7 +44,7 @@ type kind =
   (* Identifiers and literals *)
   | Identifier of string
   | CharLiteral of char
-  | IntLiteral of int
+  | IntLiteral of int_literal
   | FloatLiteral of float
   | StringLiteral of string
   (* Operators *)
@@ -96,7 +97,9 @@ type kind =
   | Eof
   | Invalid of invalid
 
-type t = { kind : kind; line : int; col : int }
+type span = { start : int; finish : int }
+type t = { kind : kind; span : span; line : int; col : int }
 
 val kind_to_string : kind -> string
-val to_string : t -> string
+val span_to_string : span -> string -> string
+val to_string : t -> string -> string
