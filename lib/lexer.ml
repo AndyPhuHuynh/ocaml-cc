@@ -1,8 +1,24 @@
 type position = { pos : int; line : int; col : int }
 type t = { source : string; position : position; start : position }
 
+let is_identifier_non_digit (c : char) : bool =
+  match c with 'a' .. 'z' | 'A' .. 'Z' | '_' -> true | _ -> false
+
+let is_digit (c : char) : bool = match c with '0' .. '9' -> true | _ -> false
+
+let is_exponent_prefix (c : char) : bool =
+  match c with 'e' | 'E' | 'p' | 'P' -> true | _ -> false
+
 let default_pos : position = { pos = 0; line = 1; col = 1 }
 let init source = { source; position = default_pos; start = default_pos }
+
+let get_span_from_start (lexer : t) (start : position) : Token.span =
+  { start = start.pos; finish = lexer.position.pos }
+
+let get_span (lexer : t) : Token.span = get_span_from_start lexer lexer.start
+
+let make_string_from_pos (lexer : t) : string =
+  String.sub lexer.source lexer.start.pos (lexer.position.pos - lexer.start.pos)
 
 let is_at_end (lexer : t) : bool =
   lexer.position.pos >= String.length lexer.source
@@ -37,7 +53,7 @@ let advance_char (lexer : t) : t =
 let make_token (kind : Token.kind) (lexer : t) : Token.t * t =
   ( {
       kind;
-      span = { start = lexer.start.pos; finish = lexer.position.pos };
+      span = get_span lexer;
       line = lexer.start.line;
       col = lexer.start.col;
     },
@@ -158,6 +174,18 @@ let lex_caret (lexer : t) : Token.t * t =
 
 let lex_tilde (lexer : t) : Token.t * t = make_token Token.Tilde lexer
 
+let rec lex_pp_number (lexer : t) : Token.t * t =
+  match peek_char lexer with
+  | Some c when is_exponent_prefix c -> begin
+      let after_prefix = advance_char lexer in
+      match peek_char after_prefix with
+      | Some ('+' | '-') -> lex_pp_number (advance_char after_prefix)
+      | _ -> lex_pp_number after_prefix
+    end
+  | Some c when is_identifier_non_digit c || is_digit c || c == '.' ->
+      lex_pp_number (advance_char lexer)
+  | _ -> make_token (Token.PPNumber (make_string_from_pos lexer)) lexer
+
 let advance_token lexer =
   let lexer, invalid_token = skip_whitespace lexer in
   match invalid_token with
@@ -195,6 +223,8 @@ let advance_token lexer =
           | ';' -> make_token Token.Semicolon lexer
           | '.' -> make_token Token.Period lexer
           | '?' -> make_token Token.Question lexer
+          (* Literals *)
+          | '0' .. '9' -> lex_pp_number lexer
           | _ -> make_token (Token.Invalid (Token.InvalidChar c)) lexer
           end
       end

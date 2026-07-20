@@ -2,6 +2,9 @@ type int_literal = { value : Z.t; suffix : string option }
 type invalid = UnterminatedComment | UnterminatedString | InvalidChar of char
 
 type kind =
+  (* Preprocessing *)
+  | HeaderName of string
+  | PPNumber of string
   (* Keywords *)
   | Auto
   | Break
@@ -91,6 +94,9 @@ type kind =
   | RightBracket
   | Colon
   | Comma
+  | Ellipses
+  | Hash
+  | HashHash
   | Semicolon
   | Period
   | Question

@@ -2,6 +2,9 @@ type int_literal = { value : Z.t; suffix : string option }
 type invalid = UnterminatedComment | UnterminatedString | InvalidChar of char
 
 type kind =
+  (* Preprocessing *)
+  | HeaderName of string
+  | PPNumber of string
   (* Keywords *)
   | Auto
   | Break
@@ -91,6 +94,9 @@ type kind =
   | RightBracket
   | Colon
   | Comma
+  | Ellipses
+  | Hash
+  | HashHash
   | Semicolon
   | Period
   | Question
@@ -101,6 +107,9 @@ type span = { start : int; finish : int }
 type t = { kind : kind; span : span; line : int; col : int }
 
 let kind_to_string = function
+  (* Preprocessor *)
+  | HeaderName _ -> "HeaderName"
+  | PPNumber _ -> "PPNumber"
   (* Keywords *)
   | Auto -> "auto"
   | Break -> "break"
@@ -190,6 +199,9 @@ let kind_to_string = function
   | RightBracket -> "RightBracket"
   | Colon -> "Colon"
   | Comma -> "Comma"
+  | Ellipses -> "Ellipses"
+  | Hash -> "Hash"
+  | HashHash -> "HashHash"
   | Semicolon -> "Semicolon"
   | Period -> "Period"
   | Question -> "Question"
