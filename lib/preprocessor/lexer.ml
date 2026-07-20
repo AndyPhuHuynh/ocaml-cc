@@ -186,6 +186,22 @@ let rec lex_pp_number (lexer : t) : Token.t * t =
       lex_pp_number (advance_char lexer)
   | _ -> make_token (Token.PPNumber (make_string_from_pos lexer)) lexer
 
+let lex_period (lexer : t) : Token.t * t =
+  match peek_char lexer with
+  | Some '.' -> begin
+      let next_lexer = advance_char lexer in
+      match peek_char next_lexer with
+      | Some '.' -> make_token Token.Ellipses (advance_char next_lexer)
+      | _ -> make_token Token.Period lexer
+    end
+  | Some '0' .. '9' -> lex_pp_number (advance_char lexer)
+  | _ -> make_token Token.Period lexer
+
+let lex_hash (lexer : t) : Token.t * t =
+  match peek_char lexer with
+  | Some '#' -> make_token Token.HashHash (advance_char lexer)
+  | _ -> make_token Token.Hash lexer
+
 let advance_token lexer =
   let lexer, invalid_token = skip_whitespace lexer in
   match invalid_token with
@@ -221,8 +237,9 @@ let advance_token lexer =
           | ':' -> make_token Token.Colon lexer
           | ',' -> make_token Token.Comma lexer
           | ';' -> make_token Token.Semicolon lexer
-          | '.' -> make_token Token.Period lexer
           | '?' -> make_token Token.Question lexer
+          | '#' -> lex_hash lexer
+          | '.' -> lex_period lexer
           (* Literals *)
           | '0' .. '9' -> lex_pp_number lexer
           | _ -> make_token (Token.Invalid (Token.InvalidChar c)) lexer
