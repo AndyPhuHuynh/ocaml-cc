@@ -116,10 +116,18 @@ type kind =
 type span = { start : int; finish : int }
 type t = { kind : kind; span : span; line : int; col : int }
 
+let header_type_to_string (type_ : header_type) =
+  match type_ with Local -> "Local" | NonLocal -> "NonLocal"
+
+let span_to_string span source =
+  String.sub source span.start (span.finish - span.start)
+
 let kind_to_string = function
   (* Preprocessor *)
-  | HeaderName _ -> "HeaderName"
-  | PPNumber _ -> "PPNumber"
+  | HeaderName { filename; type_ } ->
+      Printf.sprintf "HeaderName { filename: '%s', type: '%s'}" filename
+        (header_type_to_string type_)
+  | PPNumber value -> Printf.sprintf "PPNumber {%s}" value
   (* Keywords *)
   | Auto -> "auto"
   | Break -> "break"
@@ -160,11 +168,11 @@ let kind_to_string = function
   | Complex -> "_Complex"
   | Imaginary -> "_Imaginary"
   (* Identifiers and literals *)
-  | Identifier str -> "Identifier"
-  | CharLiteral c -> "Char Literal"
+  | Identifier str -> Printf.sprintf "Identifier {%s}" str
+  | CharLiteral str -> Printf.sprintf "CharLiteral {%s}" str
   | IntLiteral i -> "Int Literal"
   | FloatLiteral f -> "Float Literal"
-  | StringLiteral str -> "String Literal"
+  | StringLiteral str -> Printf.sprintf "StringLiteral {%s}" str
   (* Operators *)
   | Plus -> "Plus"
   | PlusEqual -> "PlusEqual"
@@ -225,24 +233,15 @@ let kind_to_string = function
       | UnterminatedStringLiteral -> "Unterminated string literal"
       | InvalidChar c -> Printf.sprintf "Invalid character '%c'" c)
 
-let header_type_to_string (type_ : header_type) =
-  match type_ with Local -> "Local" | NonLocal -> "NonLocal"
-
-let span_to_string span source =
-  String.sub source span.start (span.finish - span.start)
-
 let to_string token source =
   match token.kind with
-  | Invalid UnterminatedComment | Invalid UnterminatedStringLiteral | Eof ->
-      Printf.sprintf "([%s], %d:%d)"
+  | NewLine
+  | Invalid UnterminatedCharLiteral
+  | Invalid UnterminatedComment
+  | Invalid UnterminatedStringLiteral
+  | Eof ->
+      Printf.sprintf "([%s]: %d:%d)"
         (kind_to_string token.kind)
-        token.line token.col
-  | HeaderName { filename; type_ } ->
-      Printf.sprintf "[%s] { filename: '%s', type: '%s'}: [%s]. %d:%d"
-        (kind_to_string token.kind)
-        filename
-        (header_type_to_string type_)
-        (span_to_string token.span source)
         token.line token.col
   | _ ->
       Printf.sprintf "([%s]: [%s], %d:%d)"

@@ -28,3 +28,7 @@ comment
 ...
 #
 ##
+
+// Backslash line splicing
+123\
+456

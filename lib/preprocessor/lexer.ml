@@ -1,6 +1,9 @@
 type position = { pos : int; line : int; col : int }
 type t = { source : string; position : position; start : position }
 
+let is_whitespace (c : char) : bool =
+  match c with ' ' | '\x09' .. '\x0d' -> true | _ -> false
+
 let is_identifier_non_digit (c : char) : bool =
   match c with 'a' .. 'z' | 'A' .. 'Z' | '_' -> true | _ -> false
 
@@ -26,11 +29,11 @@ let make_string_from_current_bounds (lexer : t) : string =
 let is_at_end (lexer : t) : bool =
   lexer.position.pos >= String.length lexer.source
 
-let peek_char (lexer : t) : char option =
+let at_index (lexer : t) : char option =
   if is_at_end lexer then None else Some lexer.source.[lexer.position.pos]
 
-let advance_char (lexer : t) : t =
-  match peek_char lexer with
+let advance_index (lexer : t) : t =
+  match at_index lexer with
   | None -> lexer
   | Some '\n' ->
       {
@@ -52,6 +55,37 @@ let advance_char (lexer : t) : t =
             col = lexer.position.col + 1;
           };
       }
+
+(** [splice_lines] will skip a backslash followed by any amount of whitespace
+    and then a new line. If the backslash is not immediately followed by a
+    newline, a warning is printed*)
+let splice_lines (lexer : t) : t =
+  let rec helper (original : t) (advanced : t) : t =
+    match at_index advanced with
+    | None | Some '\n' -> begin
+        print_endline "Warning: whitespace found after trailing backslash";
+        advance_index advanced
+      end
+    | Some c when is_whitespace c -> helper original (advance_index advanced)
+    | _ -> original
+  in
+
+  match at_index lexer with
+  | Some '\\' -> (
+      let next_lexer = advance_index lexer in
+      match at_index next_lexer with
+      | None | Some '\n' -> advance_index next_lexer
+      | Some c when is_whitespace c -> helper lexer (advance_index next_lexer)
+      | _ -> lexer)
+  | _ -> lexer
+
+let peek_char (lexer : t) : char option =
+  let lexer = splice_lines lexer in
+  at_index lexer
+
+let advance_char (lexer : t) : t =
+  let lexer = splice_lines lexer in
+  advance_index lexer
 
 let make_token (kind : Token.kind) (lexer : t) : Token.t * t =
   let token : Token.t =
@@ -184,18 +218,27 @@ let lex_caret (lexer : t) : Token.t * t =
 
 let lex_tilde (lexer : t) : Token.t * t = make_token Token.Tilde lexer
 
-let rec lex_pp_number (lexer : t) : Token.t * t =
-  match peek_char lexer with
-  | Some c when is_exponent_prefix c -> begin
-      let after_prefix = advance_char lexer in
-      match peek_char after_prefix with
-      | Some ('+' | '-') -> lex_pp_number (advance_char after_prefix)
-      | _ -> lex_pp_number after_prefix
-    end
-  | Some c when is_identifier_non_digit c || is_digit c || c == '.' ->
-      lex_pp_number (advance_char lexer)
-  | _ ->
-      make_token (Token.PPNumber (make_string_from_current_bounds lexer)) lexer
+let lex_pp_number (lexer : t) : Token.t * t =
+  let rec helper (lexer : t) (buf : Buffer.t) : Token.t * t =
+    match peek_char lexer with
+    | Some c when is_exponent_prefix c -> begin
+        Buffer.add_char buf c;
+        let after_prefix = advance_char lexer in
+        match peek_char after_prefix with
+        | Some sign when sign = '+' || sign = '-' ->
+            Buffer.add_char buf sign;
+            helper (advance_char after_prefix) buf
+        | _ -> helper after_prefix buf
+      end
+    | Some c when is_identifier_non_digit c || is_digit c || c == '.' ->
+        Buffer.add_char buf c;
+        helper (advance_char lexer) buf
+    | _ -> make_token (Token.PPNumber (Buffer.contents buf)) lexer
+  in
+
+  let buf = Buffer.create 16 in
+  Buffer.add_char buf lexer.source.[lexer.start.pos];
+  helper lexer buf
 
 let lex_period (lexer : t) : Token.t * t =
   match peek_char lexer with
@@ -222,57 +265,68 @@ let rec lex_identifier (lexer : t) : Token.t * t =
         (Token.Identifier (make_string_from_current_bounds lexer))
         lexer
 
-let rec lex_char_literal (lexer : t) : Token.t * t =
-  match peek_char lexer with
-  | Some '\'' -> begin
-      let lexer = advance_char lexer in
-      make_token
-        (Token.CharLiteral
-           (make_string_from_start_pos lexer (lexer.start.pos + 1)))
-        lexer
-    end
-  | Some '\n' -> begin
-      let lexer = advance_char lexer in
-      make_token (Token.Invalid Token.UnterminatedCharLiteral) lexer
-    end
-  | Some '\\' -> begin
-      let next_lexer = advance_char lexer in
-      match peek_char next_lexer with
-      | Some '\'' -> lex_char_literal (advance_char next_lexer)
-      | _ -> lex_char_literal next_lexer
-    end
-  | _ -> lex_char_literal (advance_char lexer)
+let lex_char_literal (lexer : t) : Token.t * t =
+  let rec helper (lexer : t) (buf : Buffer.t) : Token.t * t =
+    match peek_char lexer with
+    | Some '\'' -> begin
+        let lexer = advance_char lexer in
+        make_token (Token.CharLiteral (Buffer.contents buf)) lexer
+      end
+    | None | Some '\n' -> begin
+        let lexer = advance_char lexer in
+        make_token (Token.Invalid Token.UnterminatedCharLiteral) lexer
+      end
+    | Some '\\' -> begin
+        Buffer.add_char buf '\\';
+        let next_lexer = advance_char lexer in
+        match peek_char next_lexer with
+        | Some '\'' ->
+            Buffer.add_char buf '\'';
+            helper (advance_char next_lexer) buf
+        | _ -> helper next_lexer buf
+      end
+    | Some c ->
+        Buffer.add_char buf c;
+        helper (advance_char lexer) buf
+  in
 
-let rec lex_string_literal (lexer : t) : Token.t * t =
-  match peek_char lexer with
-  | Some '"' -> begin
-      let lexer = advance_char lexer in
-      make_token
-        (Token.StringLiteral
-           (make_string_from_start_pos lexer (lexer.start.pos + 1)))
-        lexer
-    end
-  | Some '\n' -> begin
-      let lexer = advance_char lexer in
-      make_token (Token.Invalid Token.UnterminatedStringLiteral) lexer
-    end
-  | Some '\\' -> begin
-      let next_lexer = advance_char lexer in
-      match peek_char next_lexer with
-      | Some '"' -> lex_char_literal (advance_char next_lexer)
-      | _ -> lex_string_literal next_lexer
-    end
-  | _ -> lex_string_literal (advance_char lexer)
+  helper lexer (Buffer.create 1)
+
+let lex_string_literal (lexer : t) : Token.t * t =
+  let rec helper (lexer : t) (buf : Buffer.t) : Token.t * t =
+    match peek_char lexer with
+    | Some '"' -> begin
+        let lexer = advance_char lexer in
+        make_token (Token.StringLiteral (Buffer.contents buf)) lexer
+      end
+    | None | Some '\n' -> begin
+        let lexer = advance_char lexer in
+        make_token (Token.Invalid Token.UnterminatedStringLiteral) lexer
+      end
+    | Some '\\' -> begin
+        Buffer.add_char buf '\\';
+        let next_lexer = advance_char lexer in
+        match peek_char next_lexer with
+        | Some '"' ->
+            Buffer.add_char buf '"';
+            helper (advance_char next_lexer) buf
+        | _ -> helper next_lexer buf
+      end
+    | Some c ->
+        Buffer.add_char buf c;
+        helper (advance_char lexer) buf
+  in
+  helper lexer (Buffer.create 1)
 
 let lex_token lexer =
   let lexer, tok = skip_whitespace lexer in
+  let lexer = { lexer with start = lexer.position } in
   match tok with
   | Some token -> (token, lexer)
   | None ->
       begin match peek_char lexer with
       | None -> make_token Token.Eof lexer
       | Some c ->
-          let lexer = { lexer with start = lexer.position } in
           let lexer = advance_char lexer in
           begin match c with
           (* Operators *)

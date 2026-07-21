@@ -116,6 +116,7 @@ type kind =
 type span = { start : int; finish : int }
 type t = { kind : kind; span : span; line : int; col : int }
 
-val kind_to_string : kind -> string
+val header_type_to_string : header_type -> string
 val span_to_string : span -> string -> string
+val kind_to_string : kind -> string
 val to_string : t -> string -> string
