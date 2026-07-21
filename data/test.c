@@ -9,7 +9,7 @@ int main() {
     // int x = my_func();
     // return 0;
     */
-    char c = '\
+    char c = '\ 
 a';
     return 0;
 

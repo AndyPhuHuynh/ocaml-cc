@@ -1,5 +1,11 @@
 type position = { pos : int; line : int; col : int }
-type t = { source : string; position : position; start : position }
+
+type t = {
+  source : string;
+  filename : string;
+  position : position;
+  start : position;
+}
 
 let is_whitespace (c : char) : bool =
   match c with ' ' | '\x09' .. '\x0d' -> true | _ -> false
@@ -13,7 +19,9 @@ let is_exponent_prefix (c : char) : bool =
   match c with 'e' | 'E' | 'p' | 'P' -> true | _ -> false
 
 let default_pos : position = { pos = 0; line = 1; col = 1 }
-let init source = { source; position = default_pos; start = default_pos }
+
+let init filename source =
+  { source; filename; position = default_pos; start = default_pos }
 
 let get_span_from_start (lexer : t) (start : position) : Token.span =
   { start = start.pos; finish = lexer.position.pos }
@@ -63,7 +71,9 @@ let splice_lines (lexer : t) : t =
   let rec helper (original : t) (advanced : t) : t =
     match at_index advanced with
     | None | Some '\n' -> begin
-        print_endline "Warning: whitespace found after trailing backslash";
+        Printf.printf
+          "%s:%d:%d: warning: backslash and newline separated by space\n"
+          original.filename original.position.pos original.position.col;
         advance_index advanced
       end
     | Some c when is_whitespace c -> helper original (advance_index advanced)
@@ -392,7 +402,7 @@ let lex_header_name lexer =
       | _ -> lex_token lexer
     end
 
-let tokenize_all source =
+let tokenize_all filename source =
   let rec helper (lexer : t) (acc : Token.t list) =
     let tok, lexer =
       match acc with
@@ -406,4 +416,4 @@ let tokenize_all source =
     | { kind = Token.Eof } -> List.rev (tok :: acc)
     | _ -> helper lexer (tok :: acc)
   in
-  helper (init source) []
+  helper (init filename source) []

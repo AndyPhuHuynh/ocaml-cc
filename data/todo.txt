@@ -1,2 +1,1 @@
 - Support Unicode characters for identifiers
-- Handle backslash followed by newline
