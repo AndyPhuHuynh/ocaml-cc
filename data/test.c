@@ -1,3 +1,5 @@
+#include "bs"
+#include "2"
 #define value 2
 
 int main() {
@@ -9,8 +11,9 @@ int main() {
     // int x = my_func();
     // return 0;
     */
-    char c = '\ 
-a';
-    return 0;
+    
+    int x = 2;
+    printf("%d", 2);
 
+    return 0;
 }
