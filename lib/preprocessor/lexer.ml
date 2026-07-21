@@ -17,8 +17,11 @@ let get_span_from_start (lexer : t) (start : position) : Token.span =
 
 let get_span (lexer : t) : Token.span = get_span_from_start lexer lexer.start
 
-let make_string_from_pos (lexer : t) : string =
-  String.sub lexer.source lexer.start.pos (lexer.position.pos - lexer.start.pos)
+let make_string_from_start_pos (lexer : t) (start : int) =
+  String.sub lexer.source start (lexer.position.pos - start)
+
+let make_string_from_current_bounds (lexer : t) : string =
+  make_string_from_start_pos lexer lexer.start.pos
 
 let is_at_end (lexer : t) : bool =
   lexer.position.pos >= String.length lexer.source
@@ -51,13 +54,15 @@ let advance_char (lexer : t) : t =
       }
 
 let make_token (kind : Token.kind) (lexer : t) : Token.t * t =
-  ( {
+  let token : Token.t =
+    {
       kind;
       span = get_span lexer;
       line = lexer.start.line;
       col = lexer.start.col;
-    },
-    lexer )
+    }
+  in
+  (token, lexer)
 
 let rec skip_single_line_comment (lexer : t) : t * Token.t option =
   match peek_char lexer with
@@ -82,7 +87,12 @@ and skip_multi_line_comment (lexer : t) : t * Token.t option =
 
 and skip_whitespace (lexer : t) : t * Token.t option =
   match peek_char lexer with
-  | Some (' ' | '\t' | '\n' | '\r') -> skip_whitespace (advance_char lexer)
+  | Some (' ' | '\t' | '\r') -> skip_whitespace (advance_char lexer)
+  | Some '\n' -> begin
+      let lexer = { lexer with start = lexer.position } in
+      let tok, lexer = make_token Token.NewLine (advance_char lexer) in
+      (lexer, Some tok)
+    end
   | Some '/' -> begin
       let comment_pos = lexer.position in
       let next_lexer = advance_char lexer in
@@ -184,7 +194,8 @@ let rec lex_pp_number (lexer : t) : Token.t * t =
     end
   | Some c when is_identifier_non_digit c || is_digit c || c == '.' ->
       lex_pp_number (advance_char lexer)
-  | _ -> make_token (Token.PPNumber (make_string_from_pos lexer)) lexer
+  | _ ->
+      make_token (Token.PPNumber (make_string_from_current_bounds lexer)) lexer
 
 let lex_period (lexer : t) : Token.t * t =
   match peek_char lexer with
@@ -202,9 +213,18 @@ let lex_hash (lexer : t) : Token.t * t =
   | Some '#' -> make_token Token.HashHash (advance_char lexer)
   | _ -> make_token Token.Hash lexer
 
-let advance_token lexer =
-  let lexer, invalid_token = skip_whitespace lexer in
-  match invalid_token with
+let rec lex_identifier (lexer : t) : Token.t * t =
+  match peek_char lexer with
+  | Some ('_' | 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9') ->
+      lex_identifier (advance_char lexer)
+  | _ ->
+      make_token
+        (Token.Identifier (make_string_from_current_bounds lexer))
+        lexer
+
+let lex_token lexer =
+  let lexer, tok = skip_whitespace lexer in
+  match tok with
   | Some token -> (token, lexer)
   | None ->
       begin match peek_char lexer with
@@ -242,13 +262,48 @@ let advance_token lexer =
           | '.' -> lex_period lexer
           (* Literals *)
           | '0' .. '9' -> lex_pp_number lexer
+          | '_' | 'a' .. 'z' | 'A' .. 'Z' -> lex_identifier lexer
           | _ -> make_token (Token.Invalid (Token.InvalidChar c)) lexer
           end
       end
 
+let lex_header_name lexer =
+  let rec continue_lexing (lexer : t) (type_ : Token.header_type) : Token.t * t
+      =
+    let finish_lexing (lexer : t) (type_ : Token.header_type) =
+      let filename = make_string_from_start_pos lexer (lexer.start.pos + 1) in
+      make_token (Token.HeaderName { filename; type_ }) (advance_char lexer)
+    in
+    match peek_char lexer with
+    | Some '>' when type_ = Token.NonLocal -> finish_lexing lexer Token.NonLocal
+    | Some '"' when type_ = Token.Local -> finish_lexing lexer Token.Local
+    | Some '\n' | None ->
+        make_token (Token.Invalid Token.UnterminatedHeaderName)
+          (advance_char lexer)
+    | _ -> continue_lexing (advance_char lexer) type_
+  in
+
+  let lexer, tok = skip_whitespace lexer in
+  match tok with
+  | Some token -> (token, lexer)
+  | None -> begin
+      let lexer = { lexer with start = lexer.position } in
+      match peek_char lexer with
+      | Some '<' -> continue_lexing (advance_char lexer) Token.NonLocal
+      | Some '"' -> continue_lexing (advance_char lexer) Token.Local
+      | _ -> lex_token lexer
+    end
+
 let tokenize_all source =
-  let rec helper lexer acc =
-    let tok, lexer = advance_token lexer in
+  let rec helper (lexer : t) (acc : Token.t list) =
+    let tok, lexer =
+      match acc with
+      | { kind = Token.Identifier "include"; _ }
+        :: { kind = Token.Hash; _ }
+        :: _ ->
+          lex_header_name lexer
+      | _ -> lex_token lexer
+    in
     match tok with
     | { kind = Token.Eof } -> List.rev (tok :: acc)
     | _ -> helper lexer (tok :: acc)

@@ -1,9 +1,16 @@
+type header_type = Local | NonLocal
+type header_name = { filename : string; type_ : header_type }
 type int_literal = { value : Z.t; suffix : string option }
-type invalid = UnterminatedComment | UnterminatedString | InvalidChar of char
+
+type invalid =
+  | UnterminatedComment
+  | UnterminatedHeaderName
+  | UnterminatedString
+  | InvalidChar of char
 
 type kind =
   (* Preprocessing *)
-  | HeaderName of string
+  | HeaderName of header_name
   | PPNumber of string
   (* Keywords *)
   | Auto
@@ -100,6 +107,8 @@ type kind =
   | Semicolon
   | Period
   | Question
+  (* Implementation *)
+  | NewLine
   | Eof
   | Invalid of invalid
 

@@ -1,9 +1,16 @@
+type header_type = Local | NonLocal
+type header_name = { filename : string; type_ : header_type }
 type int_literal = { value : Z.t; suffix : string option }
-type invalid = UnterminatedComment | UnterminatedString | InvalidChar of char
+
+type invalid =
+  | UnterminatedComment
+  | UnterminatedHeaderName
+  | UnterminatedString
+  | InvalidChar of char
 
 type kind =
   (* Preprocessing *)
-  | HeaderName of string
+  | HeaderName of header_name
   | PPNumber of string
   (* Keywords *)
   | Auto
@@ -100,6 +107,8 @@ type kind =
   | Semicolon
   | Period
   | Question
+  (* Implementation *)
+  | NewLine
   | Eof
   | Invalid of invalid
 
@@ -205,12 +214,17 @@ let kind_to_string = function
   | Semicolon -> "Semicolon"
   | Period -> "Period"
   | Question -> "Question"
+  | NewLine -> "NewLine"
   | Eof -> "EOF"
   | Invalid invalid -> (
       match invalid with
       | UnterminatedComment -> "Unterminated multi-line comment"
+      | UnterminatedHeaderName -> "Unterminated header name"
       | UnterminatedString -> "Unterminated string"
       | InvalidChar c -> Printf.sprintf "Invalid character '%c'" c)
+
+let header_type_to_string (type_ : header_type) =
+  match type_ with Local -> "Local" | NonLocal -> "NonLocal"
 
 let span_to_string span source =
   String.sub source span.start (span.finish - span.start)
@@ -220,6 +234,13 @@ let to_string token source =
   | Invalid UnterminatedComment | Invalid UnterminatedString | Eof ->
       Printf.sprintf "([%s], %d:%d)"
         (kind_to_string token.kind)
+        token.line token.col
+  | HeaderName { filename; type_ } ->
+      Printf.sprintf "[%s] { filename: '%s', type: '%s'}: [%s]. %d:%d"
+        (kind_to_string token.kind)
+        filename
+        (header_type_to_string type_)
+        (span_to_string token.span source)
         token.line token.col
   | _ ->
       Printf.sprintf "([%s]: [%s], %d:%d)"
