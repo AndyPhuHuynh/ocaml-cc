@@ -222,6 +222,27 @@ let rec lex_identifier (lexer : t) : Token.t * t =
         (Token.Identifier (make_string_from_current_bounds lexer))
         lexer
 
+let rec lex_char_literal (lexer : t) : Token.t * t =
+  match peek_char lexer with
+  | Some '\'' -> begin
+      let lexer = advance_char lexer in
+      make_token
+        (Token.CharLiteral
+           (make_string_from_start_pos lexer (lexer.start.pos + 1)))
+        lexer
+    end
+  | Some '\n' -> begin
+      let lexer = advance_char lexer in
+      make_token (Token.Invalid Token.UnterminatedCharLiteral) lexer
+    end
+  | Some '\\' -> begin
+      let next_lexer = advance_char lexer in
+      match peek_char next_lexer with
+      | Some '\'' -> lex_char_literal (advance_char next_lexer)
+      | _ -> lex_char_literal next_lexer
+    end
+  | _ -> lex_char_literal (advance_char lexer)
+
 let lex_token lexer =
   let lexer, tok = skip_whitespace lexer in
   match tok with
@@ -261,8 +282,9 @@ let lex_token lexer =
           | '#' -> lex_hash lexer
           | '.' -> lex_period lexer
           (* Literals *)
-          | '0' .. '9' -> lex_pp_number lexer
           | '_' | 'a' .. 'z' | 'A' .. 'Z' -> lex_identifier lexer
+          | '\'' -> lex_char_literal lexer
+          | '0' .. '9' -> lex_pp_number lexer
           | _ -> make_token (Token.Invalid (Token.InvalidChar c)) lexer
           end
       end

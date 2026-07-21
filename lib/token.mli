@@ -3,6 +3,7 @@ type header_name = { filename : string; type_ : header_type }
 type int_literal = { value : Z.t; suffix : string option }
 
 type invalid =
+  | UnterminatedCharLiteral
   | UnterminatedComment
   | UnterminatedHeaderName
   | UnterminatedString
@@ -53,7 +54,7 @@ type kind =
   | Imaginary
   (* Identifiers and literals *)
   | Identifier of string
-  | CharLiteral of char
+  | CharLiteral of string
   | IntLiteral of int_literal
   | FloatLiteral of float
   | StringLiteral of string
