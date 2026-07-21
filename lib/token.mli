@@ -6,7 +6,7 @@ type invalid =
   | UnterminatedCharLiteral
   | UnterminatedComment
   | UnterminatedHeaderName
-  | UnterminatedString
+  | UnterminatedStringLiteral
   | InvalidChar of char
 
 type kind =

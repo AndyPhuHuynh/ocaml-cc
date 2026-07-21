@@ -243,6 +243,27 @@ let rec lex_char_literal (lexer : t) : Token.t * t =
     end
   | _ -> lex_char_literal (advance_char lexer)
 
+let rec lex_string_literal (lexer : t) : Token.t * t =
+  match peek_char lexer with
+  | Some '"' -> begin
+      let lexer = advance_char lexer in
+      make_token
+        (Token.StringLiteral
+           (make_string_from_start_pos lexer (lexer.start.pos + 1)))
+        lexer
+    end
+  | Some '\n' -> begin
+      let lexer = advance_char lexer in
+      make_token (Token.Invalid Token.UnterminatedStringLiteral) lexer
+    end
+  | Some '\\' -> begin
+      let next_lexer = advance_char lexer in
+      match peek_char next_lexer with
+      | Some '"' -> lex_char_literal (advance_char next_lexer)
+      | _ -> lex_string_literal next_lexer
+    end
+  | _ -> lex_string_literal (advance_char lexer)
+
 let lex_token lexer =
   let lexer, tok = skip_whitespace lexer in
   match tok with
@@ -283,8 +304,9 @@ let lex_token lexer =
           | '.' -> lex_period lexer
           (* Literals *)
           | '_' | 'a' .. 'z' | 'A' .. 'Z' -> lex_identifier lexer
-          | '\'' -> lex_char_literal lexer
           | '0' .. '9' -> lex_pp_number lexer
+          | '\'' -> lex_char_literal lexer
+          | '"' -> lex_string_literal lexer
           | _ -> make_token (Token.Invalid (Token.InvalidChar c)) lexer
           end
       end

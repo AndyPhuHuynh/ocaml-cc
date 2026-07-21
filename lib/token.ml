@@ -6,7 +6,7 @@ type invalid =
   | UnterminatedCharLiteral
   | UnterminatedComment
   | UnterminatedHeaderName
-  | UnterminatedString
+  | UnterminatedStringLiteral
   | InvalidChar of char
 
 type kind =
@@ -222,7 +222,7 @@ let kind_to_string = function
       | UnterminatedCharLiteral -> "Unterminated char literal"
       | UnterminatedComment -> "Unterminated multi-line comment"
       | UnterminatedHeaderName -> "Unterminated header name"
-      | UnterminatedString -> "Unterminated string"
+      | UnterminatedStringLiteral -> "Unterminated string literal"
       | InvalidChar c -> Printf.sprintf "Invalid character '%c'" c)
 
 let header_type_to_string (type_ : header_type) =
@@ -233,7 +233,7 @@ let span_to_string span source =
 
 let to_string token source =
   match token.kind with
-  | Invalid UnterminatedComment | Invalid UnterminatedString | Eof ->
+  | Invalid UnterminatedComment | Invalid UnterminatedStringLiteral | Eof ->
       Printf.sprintf "([%s], %d:%d)"
         (kind_to_string token.kind)
         token.line token.col
