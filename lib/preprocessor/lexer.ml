@@ -1,10 +1,11 @@
 type position = { pos : int; line : int; col : int }
 
 type t = {
-  source : string;
-  filename : string;
+  source_id : Source.id;
+  source : Source.t;
   position : position;
   start : position;
+  next_token_starts_line : bool;
 }
 
 let is_whitespace (c : char) : bool =
@@ -20,25 +21,34 @@ let is_exponent_prefix (c : char) : bool =
 
 let default_pos : position = { pos = 0; line = 1; col = 1 }
 
-let init filename source =
-  { source; filename; position = default_pos; start = default_pos }
+let create (source_id : Source.id) (source : Source.t) : t =
+  {
+    source_id;
+    source;
+    position = default_pos;
+    start = default_pos;
+    next_token_starts_line = true;
+  }
 
-let get_span_from_start (lexer : t) (start : position) : Token.span =
-  { start = start.pos; finish = lexer.position.pos }
-
-let get_span (lexer : t) : Token.span = get_span_from_start lexer lexer.start
+let get_span (lexer : t) : Source.span =
+  {
+    source_id = lexer.source_id;
+    start = lexer.start.pos;
+    length = lexer.position.pos - lexer.start.pos;
+  }
 
 let make_string_from_start_pos (lexer : t) (start : int) =
-  String.sub lexer.source start (lexer.position.pos - start)
+  String.sub lexer.source.contents start (lexer.position.pos - start)
 
 let make_string_from_current_bounds (lexer : t) : string =
   make_string_from_start_pos lexer lexer.start.pos
 
 let is_at_end (lexer : t) : bool =
-  lexer.position.pos >= String.length lexer.source
+  lexer.position.pos >= String.length lexer.source.contents
 
 let at_index (lexer : t) : char option =
-  if is_at_end lexer then None else Some lexer.source.[lexer.position.pos]
+  if is_at_end lexer then None
+  else Some lexer.source.contents.[lexer.position.pos]
 
 let advance_index (lexer : t) : t =
   match at_index lexer with
@@ -72,8 +82,8 @@ let splice_lines (lexer : t) : t =
     match at_index advanced with
     | None | Some '\n' -> begin
         Printf.printf
-          "%s:%d:%d: warning: backslash and newline separated by space\n"
-          original.filename original.position.pos original.position.col;
+          "%s:%d:%d: warning: backslash and newline separated by whitespace\n"
+          original.source.filepath original.position.pos original.position.col;
         advance_index advanced
       end
     | Some c when is_whitespace c -> helper original (advance_index advanced)
@@ -98,12 +108,15 @@ let advance_char (lexer : t) : t =
   advance_index lexer
 
 let make_token (kind : Token.kind) (lexer : t) : Token.t * t =
+  let is_at_line_start = lexer.next_token_starts_line in
+  let lexer = { lexer with next_token_starts_line = kind = Token.NewLine } in
   let token : Token.t =
     {
       kind;
       span = get_span lexer;
       line = lexer.start.line;
       col = lexer.start.col;
+      is_at_line_start;
     }
   in
   (token, lexer)
@@ -247,7 +260,7 @@ let lex_pp_number (lexer : t) : Token.t * t =
   in
 
   let buf = Buffer.create 16 in
-  Buffer.add_char buf lexer.source.[lexer.start.pos];
+  Buffer.add_char buf lexer.source.contents.[lexer.start.pos];
   helper lexer buf
 
 let lex_period (lexer : t) : Token.t * t =
@@ -379,8 +392,8 @@ let lex_header_name lexer =
   let rec continue_lexing (lexer : t) (type_ : Token.header_type) : Token.t * t
       =
     let finish_lexing (lexer : t) (type_ : Token.header_type) =
-      let filename = make_string_from_start_pos lexer (lexer.start.pos + 1) in
-      make_token (Token.HeaderName { filename; type_ }) (advance_char lexer)
+      let filepath = make_string_from_start_pos lexer (lexer.start.pos + 1) in
+      make_token (Token.HeaderName { filepath; type_ }) (advance_char lexer)
     in
     match peek_char lexer with
     | Some '>' when type_ = Token.NonLocal -> finish_lexing lexer Token.NonLocal
@@ -402,7 +415,7 @@ let lex_header_name lexer =
       | _ -> lex_token lexer
     end
 
-let tokenize_all filename source =
+let tokenize_all (source_id : Source.id) (source : Source.t) =
   let rec helper (lexer : t) (acc : Token.t list) =
     let tok, lexer =
       match acc with
@@ -416,4 +429,4 @@ let tokenize_all filename source =
     | { kind = Token.Eof } -> List.rev (tok :: acc)
     | _ -> helper lexer (tok :: acc)
   in
-  helper (init filename source) []
+  helper (create source_id source) []

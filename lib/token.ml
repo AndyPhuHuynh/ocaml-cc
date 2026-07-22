@@ -1,5 +1,5 @@
 type header_type = Local | NonLocal
-type header_name = { filename : string; type_ : header_type }
+type header_name = { filepath : string; type_ : header_type }
 type int_literal = { value : Z.t; suffix : string option }
 
 type invalid =
@@ -113,19 +113,21 @@ type kind =
   | Eof
   | Invalid of invalid
 
-type span = { start : int; finish : int }
-type t = { kind : kind; span : span; line : int; col : int }
+type t = {
+  kind : kind;
+  span : Source.span;
+  line : int;
+  col : int;
+  is_at_line_start : bool;
+}
 
 let header_type_to_string (type_ : header_type) =
   match type_ with Local -> "Local" | NonLocal -> "NonLocal"
 
-let span_to_string span source =
-  String.sub source span.start (span.finish - span.start)
-
 let kind_to_string = function
   (* Preprocessor *)
-  | HeaderName { filename; type_ } ->
-      Printf.sprintf "HeaderName { filename: '%s', type: '%s'}" filename
+  | HeaderName { filepath; type_ } ->
+      Printf.sprintf "HeaderName { filepath: '%s', type: '%s'}" filepath
         (header_type_to_string type_)
   | PPNumber value -> Printf.sprintf "PPNumber {%s}" value
   (* Keywords *)
@@ -233,7 +235,7 @@ let kind_to_string = function
       | UnterminatedStringLiteral -> "Unterminated string literal"
       | InvalidChar c -> Printf.sprintf "Invalid character '%c'" c)
 
-let to_string token source =
+let to_string (token : t) (source_manager : Source.manager) : string =
   match token.kind with
   | NewLine
   | Invalid UnterminatedCharLiteral
@@ -246,5 +248,5 @@ let to_string token source =
   | _ ->
       Printf.sprintf "([%s]: [%s], %d:%d)"
         (kind_to_string token.kind)
-        (span_to_string token.span source)
+        (Source.span_to_string token.span source_manager)
         token.line token.col

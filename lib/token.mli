@@ -1,5 +1,5 @@
 type header_type = Local | NonLocal
-type header_name = { filename : string; type_ : header_type }
+type header_name = { filepath : string; type_ : header_type }
 type int_literal = { value : Z.t; suffix : string option }
 
 type invalid =
@@ -113,10 +113,14 @@ type kind =
   | Eof
   | Invalid of invalid
 
-type span = { start : int; finish : int }
-type t = { kind : kind; span : span; line : int; col : int }
+type t = {
+  kind : kind;
+  span : Source.span;
+  line : int;
+  col : int;
+  is_at_line_start : bool;
+}
 
 val header_type_to_string : header_type -> string
-val span_to_string : span -> string -> string
 val kind_to_string : kind -> string
-val to_string : t -> string -> string
+val to_string : t -> Source.manager -> string

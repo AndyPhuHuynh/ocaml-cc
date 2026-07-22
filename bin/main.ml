@@ -13,6 +13,8 @@ let () =
     exit 1
   end;
 
-  let str = read_entire_file !input_file in
-  let tokens = Preprocessor.Lexer.tokenize_all !input_file str in
-  List.iter (fun tok -> print_endline (Token.to_string tok str)) tokens
+  (* let tokens = Preprocessor.Lexer.tokenize_all !input_file str in *)
+  let tokens, source_manager = Preprocessor.Engine.tokenize_all !input_file in
+  List.iter
+    (fun tok -> print_endline (Token.to_string tok source_manager))
+    tokens
