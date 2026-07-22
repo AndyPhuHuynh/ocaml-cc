@@ -14,7 +14,7 @@ let () =
   end;
 
   (* let tokens = Preprocessor.Lexer.tokenize_all !input_file str in *)
-  let tokens, source_manager = Preprocessor.Engine.tokenize_all !input_file in
+  let tokens, source_manager = Preprocessor.tokenize_all !input_file in
   List.iter
     (fun tok -> print_endline (Token.to_string tok source_manager))
     tokens
