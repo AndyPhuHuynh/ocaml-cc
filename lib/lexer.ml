@@ -74,37 +74,55 @@ let advance_index (lexer : t) : t =
           };
       }
 
-(** [splice_lines] will skip a backslash followed by any amount of whitespace
-    and then a new line. If the backslash is not immediately followed by a
-    newline, a warning is printed*)
-let splice_lines (lexer : t) : t =
-  let rec helper (original : t) (advanced : t) : t =
+type splice_result =
+  | NoSplice
+  | Splice of { lexer : t; whitespace_separated : bool }
+
+(** [find_line_splice] will check for backslash followed by any amount of
+    whitespace and then a new line. *)
+let find_line_splice (lexer : t) : splice_result =
+  let rec helper (original : t) (advanced : t) : splice_result =
     match at_index advanced with
     | None | Some '\n' -> begin
-        Printf.printf
-          "%s:%d:%d: warning: backslash and newline separated by whitespace\n"
-          original.source.filepath original.position.pos original.position.col;
-        advance_index advanced
+        let advanced = advance_index advanced in
+        Splice { lexer = advanced; whitespace_separated = true }
       end
     | Some c when is_whitespace c -> helper original (advance_index advanced)
-    | _ -> original
+    | _ -> NoSplice
   in
 
   match at_index lexer with
   | Some '\\' -> (
       let next_lexer = advance_index lexer in
       match at_index next_lexer with
-      | None | Some '\n' -> advance_index next_lexer
+      | None | Some '\n' ->
+          Splice
+            { lexer = advance_index next_lexer; whitespace_separated = false }
       | Some c when is_whitespace c -> helper lexer (advance_index next_lexer)
-      | _ -> lexer)
-  | _ -> lexer
+      | _ -> NoSplice)
+  | _ -> NoSplice
 
 let peek_char (lexer : t) : char option =
-  let lexer = splice_lines lexer in
+  let lexer =
+    match find_line_splice lexer with
+    | NoSplice -> lexer
+    | Splice { lexer; _ } -> lexer
+  in
   at_index lexer
 
 let advance_char (lexer : t) : t =
-  let lexer = splice_lines lexer in
+  let lexer =
+    match find_line_splice lexer with
+    | NoSplice -> lexer
+    | Splice result -> begin
+        if result.whitespace_separated then begin
+          Diagnostics.emit_warning lexer.source.filepath lexer.position.line
+            lexer.position.col "backslash and newline separated by whitespace"
+        end;
+        result.lexer
+      end
+  in
+
   advance_index lexer
 
 let make_token (kind : Token.kind) (lexer : t) : Token.t * t =
