@@ -74,9 +74,8 @@ let advance_index (lexer : t) : t =
           };
       }
 
-type splice_result =
-  | NoSplice
-  | Splice of { lexer : t; whitespace_separated : bool }
+type splice = { lexer : t; whitespace_separated : bool; line : int; col : int }
+type splice_result = NoSplice | Splice of splice
 
 (** [find_line_splice] will check for backslash followed by any amount of
     whitespace and then a new line. *)
@@ -85,7 +84,13 @@ let find_line_splice (lexer : t) : splice_result =
     match at_index advanced with
     | None | Some '\n' -> begin
         let advanced = advance_index advanced in
-        Splice { lexer = advanced; whitespace_separated = true }
+        Splice
+          {
+            lexer = advanced;
+            whitespace_separated = true;
+            line = original.position.line;
+            col = original.position.col;
+          }
       end
     | Some c when is_whitespace c -> helper original (advance_index advanced)
     | _ -> NoSplice
@@ -97,30 +102,61 @@ let find_line_splice (lexer : t) : splice_result =
       match at_index next_lexer with
       | None | Some '\n' ->
           Splice
-            { lexer = advance_index next_lexer; whitespace_separated = false }
+            {
+              lexer = advance_index next_lexer;
+              whitespace_separated = false;
+              line = lexer.position.line;
+              col = lexer.position.col;
+            }
       | Some c when is_whitespace c -> helper lexer (advance_index next_lexer)
       | _ -> NoSplice)
   | _ -> NoSplice
 
+let find_line_splice_sequence (lexer : t) : splice list =
+  let rec helper (lexer : t) (acc : splice list) =
+    match find_line_splice lexer with
+    | NoSplice -> List.rev acc
+    | Splice result -> helper result.lexer (result :: acc)
+  in
+  helper lexer []
+
+let emit_splice_diagnostic (splice : splice) : unit =
+  Diagnostics.emit_warning splice.lexer.source.filepath splice.line splice.col
+    "backslash and newline separated by whitespace"
+
+let rec last_elem = function
+  | [] -> failwith "last_elem called with empty list"
+  | [ x ] -> x
+  | x :: xs -> last_elem xs
+
 let peek_char (lexer : t) : char option =
   let lexer =
-    match find_line_splice lexer with
-    | NoSplice -> lexer
-    | Splice { lexer; _ } -> lexer
+    match find_line_splice_sequence lexer with
+    | [] -> lexer
+    | xs -> (last_elem xs).lexer
   in
   at_index lexer
 
 let advance_char (lexer : t) : t =
-  let lexer =
-    match find_line_splice lexer with
-    | NoSplice -> lexer
-    | Splice result -> begin
-        if result.whitespace_separated then begin
-          Diagnostics.emit_warning lexer.source.filepath lexer.position.line
-            lexer.position.col "backslash and newline separated by whitespace"
+  let rec iter_splices (list : splice list) : t option =
+    match list with
+    | [] -> None
+    | [ x ] ->
+        if x.whitespace_separated then begin
+          emit_splice_diagnostic x
         end;
-        result.lexer
-      end
+        Some x.lexer
+    | x :: xs ->
+        if x.whitespace_separated then begin
+          emit_splice_diagnostic x
+        end;
+        iter_splices xs
+  in
+
+  let lexer =
+    match iter_splices (find_line_splice_sequence lexer) with
+    | None -> lexer
+    | Some lexer -> lexer
   in
 
   advance_index lexer
@@ -259,7 +295,7 @@ let lex_caret (lexer : t) : Token.t * t =
 
 let lex_tilde (lexer : t) : Token.t * t = make_token Token.Tilde lexer
 
-let lex_pp_number (lexer : t) : Token.t * t =
+let lex_pp_number (lexer : t) (start_char : char) : Token.t * t =
   let rec helper (lexer : t) (buf : Buffer.t) : Token.t * t =
     match peek_char lexer with
     | Some c when is_exponent_prefix c -> begin
@@ -278,7 +314,7 @@ let lex_pp_number (lexer : t) : Token.t * t =
   in
 
   let buf = Buffer.create 16 in
-  Buffer.add_char buf lexer.source.contents.[lexer.start.pos];
+  Buffer.add_char buf start_char;
   helper lexer buf
 
 let lex_period (lexer : t) : Token.t * t =
@@ -289,7 +325,7 @@ let lex_period (lexer : t) : Token.t * t =
       | Some '.' -> make_token Token.Ellipses (advance_char next_lexer)
       | _ -> make_token Token.Period lexer
     end
-  | Some '0' .. '9' -> lex_pp_number (advance_char lexer)
+  | Some '0' .. '9' -> lex_pp_number lexer '.'
   | _ -> make_token Token.Period lexer
 
 let lex_hash (lexer : t) : Token.t * t =
@@ -399,7 +435,7 @@ let lex_token lexer =
           | '.' -> lex_period lexer
           (* Literals *)
           | '_' | 'a' .. 'z' | 'A' .. 'Z' -> lex_identifier lexer
-          | '0' .. '9' -> lex_pp_number lexer
+          | '0' .. '9' -> lex_pp_number lexer c
           | '\'' -> lex_char_literal lexer
           | '"' -> lex_string_literal lexer
           | _ -> make_token (Token.Invalid (Token.InvalidChar c)) lexer
