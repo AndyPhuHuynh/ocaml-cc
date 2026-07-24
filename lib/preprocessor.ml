@@ -1,6 +1,6 @@
 type defines = string list
 type source = { id : Source.id; source : Source.t; lexer : Lexer.t }
-type source_stack = { current : source; rest : source list }
+type source_stack = { current : source; rest : source list; size : int }
 
 type t = {
   defines : defines;
@@ -36,7 +36,11 @@ let append_source (pp : t) (filepath : string) (contents : string) : t =
 
   let current = { id; source; lexer = Lexer.create id source } in
   let source_stack =
-    { current; rest = pp.source_stack.current :: pp.source_stack.rest }
+    {
+      current;
+      rest = pp.source_stack.current :: pp.source_stack.rest;
+      size = pp.source_stack.size + 1;
+    }
   in
   { pp with source_manager; source_stack }
 
@@ -44,7 +48,9 @@ let pop_source (pp : t) : t =
   match pp.source_stack.rest with
   | [] -> failwith "Attempting to pop empty source"
   | x :: xs ->
-      let source_stack = { current = x; rest = xs } in
+      let source_stack =
+        { current = x; rest = xs; size = pp.source_stack.size - 1 }
+      in
       { pp with source_stack }
 
 let process_directive_include (pp : t) : t =
@@ -56,7 +62,13 @@ let process_directive_include (pp : t) : t =
         get_paths_from_include pp.source_stack.current.source.filepath filepath
       in
       let contents = read_entire_file filepath in
-      append_source pp filepath contents
+      let new_pp = append_source pp filepath contents in
+      if new_pp.source_stack.size >= 256 then begin
+        Diagnostics.emit_error filepath token.line token.col
+          "maximum include depth exceeded";
+        exit 1
+      end;
+      new_pp
     end
   | _ -> begin
       Printf.printf "Expect headername, got: %s"
@@ -87,7 +99,8 @@ let init filepath =
   {
     defines = [];
     source_manager = new_manager;
-    source_stack = { current = { id = source_id; source; lexer }; rest = [] };
+    source_stack =
+      { current = { id = source_id; source; lexer }; rest = []; size = 0 };
   }
 
 let rec next_token (pp : t) : Token.t * t =
