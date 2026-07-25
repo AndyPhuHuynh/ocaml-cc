@@ -8,6 +8,9 @@ type t = {
   source_stack : source_stack;
 }
 
+let get_current_source (pp : t) : Source.t = pp.source_stack.current.source
+let get_current_filepath (pp : t) : string = (get_current_source pp).filepath
+
 let get_paths_from_include (current_file : string) (include_ : string) =
   let current_file = Source.make_absolute_path current_file in
   Filename.concat (Filename.dirname current_file) include_
@@ -51,7 +54,7 @@ let process_directive_include (pp : t) : t =
   let token, lexer = lex_current_header_name pp in
   let pp = update_lexer pp lexer in
   match token.kind with
-  | Token.HeaderName { filepath; _ } -> begin
+  | HeaderName { filepath; _ } -> begin
       let filepath =
         get_paths_from_include pp.source_stack.current.source.filepath filepath
       in
@@ -69,16 +72,28 @@ let process_directive_include (pp : t) : t =
       exit 1
     end
 
+let rec process_directive_invalid (pp : t) : t =
+  let rec skip_line (pp : t) =
+    let token, lexer = lex_current pp in
+    match token.kind with
+    | Eof | NewLine -> update_lexer pp lexer
+    | _ -> skip_line (update_lexer pp lexer)
+  in
+
+  let invalid, lexer = lex_current pp in
+  let msg =
+    Printf.sprintf "invalid preprocessing directive: %s"
+      (Source.span_to_string invalid.span pp.source_manager)
+  in
+  Diagnostics.emit_error (get_current_filepath pp) invalid.line invalid.col msg;
+  skip_line pp
+
 let process_directive (pp : t) : t =
   let directive, lexer = lex_current pp in
   match directive.kind with
   | Identifier "include" -> process_directive_include (update_lexer pp lexer)
-  | Identifier str ->
-      Printf.printf "TODO: directive %s" str;
-      exit 1
-  | _ ->
-      print_endline "TODO: Non directive found after hash";
-      exit 1
+  | NewLine -> update_lexer pp lexer
+  | _ -> process_directive_invalid pp
 
 let init filepath =
   let filepath = Source.make_absolute_path filepath in
@@ -99,13 +114,13 @@ let init filepath =
 let rec next_token (pp : t) : Token.t * t =
   let token, lexer = lex_current pp in
   match token.kind with
-  | Token.Eof ->
+  | Eof ->
       begin match pp.source_stack.rest with
       | [] -> (token, pp)
       | _ -> next_token (pop_source pp)
       end
-  | Token.NewLine -> next_token (update_lexer pp lexer)
-  | Token.Hash when token.is_at_line_start ->
+  | NewLine -> next_token (update_lexer pp lexer)
+  | Hash when token.is_at_line_start ->
       let pp = process_directive (update_lexer pp lexer) in
       next_token pp
   | _ -> (token, update_lexer pp lexer)
@@ -114,7 +129,7 @@ let tokenize_all (filepath : string) : Token.t list * Source.manager =
   let rec helper (pp : t) (acc : Token.t list) : Token.t list * Source.manager =
     let tok, pp = next_token pp in
     match tok.kind with
-    | Token.Eof -> (List.rev (tok :: acc), pp.source_manager)
+    | Eof -> (List.rev (tok :: acc), pp.source_manager)
     | _ -> helper pp (tok :: acc)
   in
   let pp = init filepath in
