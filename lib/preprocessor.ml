@@ -50,32 +50,46 @@ let pop_source (pp : t) : t =
       in
       { pp with source_stack }
 
+let rec skip_line (pp : t) =
+  let token, lexer = lex_current pp in
+  match token.kind with
+  | Eof | NewLine -> update_lexer pp lexer
+  | _ -> skip_line (update_lexer pp lexer)
+
 let process_directive_include (pp : t) : t =
   let token, lexer = lex_current_header_name pp in
   let pp = update_lexer pp lexer in
   match token.kind with
-  | HeaderName { filepath; _ } -> begin
-      let filepath =
-        get_paths_from_include (get_current_filepath pp) filepath
-      in
+  | HeaderName { filepath; _ } ->
+      begin if filepath = "" then begin
+        Diagnostics.emit_error (get_current_filepath pp) token.line token.col
+          "empty filename in #include directive";
+        skip_line pp
+      end
+      else
+        let filepath =
+          get_paths_from_include (get_current_filepath pp) filepath
+        in
 
-      try
-        if not (Source.is_regular_file filepath) then begin
+        try
+          if not (Source.is_regular_file filepath) then begin
+            Diagnostics.emit_fatal_error (get_current_filepath pp) token.line
+              token.col
+              (Printf.sprintf "'%s' file not found" filepath)
+              1
+          end;
+
+          if pp.source_stack.size >= 256 then begin
+            Diagnostics.emit_fatal_error (get_current_filepath pp) token.line
+              token.col "maximum include depth exceeded" 1
+          end;
+
+          let new_pp = append_source pp filepath in
+          new_pp
+        with Sys_error error_msg ->
           Diagnostics.emit_fatal_error (get_current_filepath pp) token.line
-            token.col
-            (Printf.sprintf "'%s' file not found" filepath)
-            1
-        end;
-        let new_pp = append_source pp filepath in
-        if new_pp.source_stack.size >= 256 then begin
-          Diagnostics.emit_fatal_error (get_current_filepath pp) token.line
-            token.col "maximum include depth exceeded" 1
-        end;
-        new_pp
-      with Sys_error error_msg ->
-        Diagnostics.emit_fatal_error (get_current_filepath pp) token.line
-          token.col error_msg 1
-    end
+            token.col error_msg 1
+      end
   | _ -> begin
       Printf.printf "Expect headername, got: %s"
         (Token.to_string token pp.source_manager);
@@ -83,13 +97,6 @@ let process_directive_include (pp : t) : t =
     end
 
 let rec process_directive_invalid (pp : t) : t =
-  let rec skip_line (pp : t) =
-    let token, lexer = lex_current pp in
-    match token.kind with
-    | Eof | NewLine -> update_lexer pp lexer
-    | _ -> skip_line (update_lexer pp lexer)
-  in
-
   let invalid, lexer = lex_current pp in
   let msg =
     Printf.sprintf "invalid preprocessing directive: %s"
