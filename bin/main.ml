@@ -1,7 +1,5 @@
 open Ocaml_cc
 
-let read_entire_file name = In_channel.with_open_text name In_channel.input_all
-
 let () =
   let usage_msg = "ocaml-cc -i <input>" in
   let input_file = ref "" in

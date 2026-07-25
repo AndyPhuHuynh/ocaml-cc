@@ -56,15 +56,25 @@ let process_directive_include (pp : t) : t =
   match token.kind with
   | HeaderName { filepath; _ } -> begin
       let filepath =
-        get_paths_from_include pp.source_stack.current.source.filepath filepath
+        get_paths_from_include (get_current_filepath pp) filepath
       in
-      let new_pp = append_source pp filepath in
-      if new_pp.source_stack.size >= 256 then begin
-        Diagnostics.emit_error filepath token.line token.col
-          "maximum include depth exceeded";
-        exit 1
-      end;
-      new_pp
+
+      try
+        if not (Source.is_regular_file filepath) then begin
+          Diagnostics.emit_fatal_error (get_current_filepath pp) token.line
+            token.col
+            (Printf.sprintf "'%s' file not found" filepath)
+            1
+        end;
+        let new_pp = append_source pp filepath in
+        if new_pp.source_stack.size >= 256 then begin
+          Diagnostics.emit_fatal_error (get_current_filepath pp) token.line
+            token.col "maximum include depth exceeded" 1
+        end;
+        new_pp
+      with Sys_error error_msg ->
+        Diagnostics.emit_fatal_error (get_current_filepath pp) token.line
+          token.col error_msg 1
     end
   | _ -> begin
       Printf.printf "Expect headername, got: %s"

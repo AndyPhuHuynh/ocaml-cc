@@ -18,6 +18,9 @@ let make_absolute_path (path : string) =
   if Filename.is_relative path then Filename.concat (Sys.getcwd ()) path
   else path
 
+let is_regular_file (filepath : string) : bool =
+  Sys.file_exists filepath && not (Sys.is_directory filepath)
+
 let empty_manager =
   { next_id = 0; from_id = IntMap.empty; from_filepath = StringMap.empty }
 

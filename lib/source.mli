@@ -4,6 +4,7 @@ type span = { source_id : id; start : int; length : int }
 type manager
 
 val make_absolute_path : string -> string
+val is_regular_file : string -> bool
 val empty_manager : manager
 
 val load_file : manager -> string -> manager * id * t
