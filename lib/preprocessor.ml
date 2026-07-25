@@ -8,16 +8,9 @@ type t = {
   source_stack : source_stack;
 }
 
-let make_absolute_path (path : string) =
-  if Filename.is_relative path then Filename.concat (Sys.getcwd ()) path
-  else path
-
 let get_paths_from_include (current_file : string) (include_ : string) =
-  let current_file = make_absolute_path current_file in
+  let current_file = Source.make_absolute_path current_file in
   Filename.concat (Filename.dirname current_file) include_
-
-let read_entire_file (name : string) =
-  In_channel.with_open_text name In_channel.input_all
 
 let lex_current (pp : t) : Token.t * Lexer.t =
   Lexer.lex_token pp.source_stack.current.lexer
@@ -30,9 +23,10 @@ let update_lexer (pp : t) (lexer : Lexer.t) : t =
   let source_stack = { pp.source_stack with current } in
   { pp with source_stack }
 
-let append_source (pp : t) (filepath : string) (contents : string) : t =
-  let source = Source.create_source filepath contents in
-  let source_manager, id = Source.add_source pp.source_manager source in
+let append_source (pp : t) (filepath : string) : t =
+  let source_manager, id, source =
+    Source.load_file pp.source_manager filepath
+  in
 
   let current = { id; source; lexer = Lexer.create id source } in
   let source_stack =
@@ -61,8 +55,7 @@ let process_directive_include (pp : t) : t =
       let filepath =
         get_paths_from_include pp.source_stack.current.source.filepath filepath
       in
-      let contents = read_entire_file filepath in
-      let new_pp = append_source pp filepath contents in
+      let new_pp = append_source pp filepath in
       if new_pp.source_stack.size >= 256 then begin
         Diagnostics.emit_error filepath token.line token.col
           "maximum include depth exceeded";
@@ -88,12 +81,12 @@ let process_directive (pp : t) : t =
       exit 1
 
 let init filepath =
-  let filepath = make_absolute_path filepath in
-  let contents = read_entire_file filepath in
+  let filepath = Source.make_absolute_path filepath in
 
-  let source_manager = Source.create_manager in
-  let source : Source.t = { filepath; contents } in
-  let new_manager, source_id = Source.add_source source_manager source in
+  let source_manager = Source.empty_manager in
+  let new_manager, source_id, source =
+    Source.load_file source_manager filepath
+  in
   let lexer = Lexer.create source_id source in
 
   {
