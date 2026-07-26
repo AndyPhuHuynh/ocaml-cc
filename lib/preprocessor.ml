@@ -4,12 +4,35 @@ type source_stack = { current : source; rest : source list; size : int }
 
 type t = {
   defines : defines;
+  include_stack_printed : bool;
   source_manager : Source.manager;
   source_stack : source_stack;
 }
 
 let get_current_source (pp : t) : Source.t = pp.source_stack.current.source
 let get_current_filepath (pp : t) : string = (get_current_source pp).filepath
+
+let print_include_stack (pp : t) : unit =
+  let stack = List.rev pp.source_stack.rest in
+  List.iter (fun source -> print_endline source.source.filepath) stack
+
+let emit_error (pp : t) (line : int) (col : int) (msg : string) : t =
+  let new_pp =
+    if not pp.include_stack_printed then begin
+      print_include_stack pp;
+      Some { pp with include_stack_printed = true }
+    end
+    else None
+  in
+  Diagnostics.emit_error (get_current_filepath pp) line col msg;
+  Option.value new_pp ~default:pp
+
+let emit_fatal_error (pp : t) (line : int) (col : int) (msg : string)
+    (exit_code : int) : 'a =
+  if not pp.include_stack_printed then begin
+    print_include_stack pp
+  end;
+  Diagnostics.emit_fatal_error (get_current_filepath pp) line col msg exit_code
 
 let get_paths_from_include (current_file : string) (include_ : string) =
   let current_file = Source.make_absolute_path current_file in
@@ -39,7 +62,7 @@ let append_source (pp : t) (filepath : string) : t =
       size = pp.source_stack.size + 1;
     }
   in
-  { pp with source_manager; source_stack }
+  { pp with include_stack_printed = false; source_manager; source_stack }
 
 let pop_source (pp : t) : t =
   match pp.source_stack.rest with
@@ -62,8 +85,10 @@ let process_directive_include (pp : t) : t =
   match token.kind with
   | HeaderName { filepath; _ } ->
       begin if filepath = "" then begin
-        Diagnostics.emit_error (get_current_filepath pp) token.line token.col
-          "empty filename in #include directive";
+        let pp =
+          emit_error pp token.line token.col
+            "empty filename in #include directive"
+        in
         skip_line pp
       end
       else
@@ -123,6 +148,7 @@ let init filepath =
 
   {
     defines = [];
+    include_stack_printed = false;
     source_manager = new_manager;
     source_stack =
       { current = { id = source_id; source; lexer }; rest = []; size = 0 };

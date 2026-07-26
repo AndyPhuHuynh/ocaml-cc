@@ -2,4 +2,4 @@
 
 (library
  (name ocaml_cc)
- (libraries zarith))
+ (libraries unix zarith))

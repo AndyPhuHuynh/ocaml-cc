@@ -15,7 +15,8 @@ let read_entire_file (name : string) : string =
   In_channel.with_open_text name In_channel.input_all
 
 let make_absolute_path (path : string) =
-  if Filename.is_relative path then Filename.concat (Sys.getcwd ()) path
+  if Filename.is_relative path then
+    Filename.concat (Sys.getcwd ()) path |> Unix.realpath
   else path
 
 let is_regular_file (filepath : string) : bool =
