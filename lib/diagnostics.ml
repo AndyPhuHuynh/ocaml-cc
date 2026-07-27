@@ -11,4 +11,4 @@ let emit_fatal_error (filepath : string) (line : int) (col : int) (msg : string)
   exit exit_code
 
 let emit_driver_error (msg : string) : unit =
-  Printf.printf "ocaml-cc: error: %s\n" msg
+  Printf.eprintf "ocaml-cc: error: %s\n" msg
