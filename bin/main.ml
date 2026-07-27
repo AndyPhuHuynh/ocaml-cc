@@ -11,8 +11,12 @@ let () =
     exit 1
   end;
 
-  (* let tokens = Preprocessor.Lexer.tokenize_all !input_file str in *)
-  let tokens, source_manager = Preprocessor.tokenize_all !input_file in
-  List.iter
-    (fun tok -> print_endline (Token.to_string tok source_manager))
-    tokens
+  match Preprocessor.tokenize_all !input_file with
+  | Ok (tokens, source_manager) ->
+      List.iter
+        (fun tok -> print_endline (Token.to_string tok source_manager))
+        tokens
+  | Error FileNotFound ->
+      Diagnostics.emit_driver_error
+        (Printf.sprintf "file not found: %S" !input_file)
+  | Error (IOError msg) -> Diagnostics.emit_driver_error msg

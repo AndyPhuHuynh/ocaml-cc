@@ -9,3 +9,6 @@ let emit_fatal_error (filepath : string) (line : int) (col : int) (msg : string)
     (exit_code : int) : 'a =
   emit_helper "fatal error" filepath line col msg;
   exit exit_code
+
+let emit_driver_error (msg : string) : unit =
+  Printf.printf "ocaml-cc: error: %s\n" msg

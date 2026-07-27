@@ -9,6 +9,7 @@ type t = {
   source_stack : source_stack;
 }
 
+let ( let* ) = Result.bind
 let get_current_source (pp : t) : Source.t = pp.source_stack.current.source
 let get_current_filepath (pp : t) : string = (get_current_source pp).filepath
 
@@ -35,7 +36,6 @@ let emit_fatal_error (pp : t) (line : int) (col : int) (msg : string)
   Diagnostics.emit_fatal_error (get_current_filepath pp) line col msg exit_code
 
 let get_paths_from_include (current_file : string) (include_ : string) =
-  let current_file = Source.make_absolute_path current_file in
   Filename.concat (Filename.dirname current_file) include_
 
 let lex_current (pp : t) : Token.t * Lexer.t =
@@ -49,8 +49,8 @@ let update_lexer (pp : t) (lexer : Lexer.t) : t =
   let source_stack = { pp.source_stack with current } in
   { pp with source_stack }
 
-let append_source (pp : t) (filepath : string) : t =
-  let source_manager, id, source =
+let append_source (pp : t) (filepath : string) : (t, Source.load_error) result =
+  let* source_manager, id, source =
     Source.load_file pp.source_manager filepath
   in
 
@@ -62,7 +62,7 @@ let append_source (pp : t) (filepath : string) : t =
       size = pp.source_stack.size + 1;
     }
   in
-  { pp with include_stack_printed = false; source_manager; source_stack }
+  Ok { pp with include_stack_printed = false; source_manager; source_stack }
 
 let pop_source (pp : t) : t =
   match pp.source_stack.rest with
@@ -83,38 +83,33 @@ let process_directive_include (pp : t) : t =
   let token, lexer = lex_current_header_name pp in
   let pp = update_lexer pp lexer in
   match token.kind with
-  | HeaderName { filepath; _ } ->
-      begin if filepath = "" then begin
-        let pp =
-          emit_error pp token.line token.col
-            "empty filename in #include directive"
-        in
-        skip_line pp
-      end
-      else
-        let filepath =
-          get_paths_from_include (get_current_filepath pp) filepath
-        in
+  | HeaderName { filepath = ""; _ } ->
+      let pp =
+        emit_error pp token.line token.col
+          "empty filename in #include directive"
+      in
+      skip_line pp
+  | HeaderName { filepath; _ } -> begin
+      let filepath =
+        get_paths_from_include (get_current_filepath pp) filepath
+      in
 
-        try
-          if not (Source.is_regular_file filepath) then begin
-            Diagnostics.emit_fatal_error (get_current_filepath pp) token.line
-              token.col
-              (Printf.sprintf "'%s' file not found" filepath)
-              1
-          end;
+      if pp.source_stack.size >= 256 then begin
+        Diagnostics.emit_fatal_error (get_current_filepath pp) token.line
+          token.col "maximum include depth exceeded" 1
+      end;
 
-          if pp.source_stack.size >= 256 then begin
-            Diagnostics.emit_fatal_error (get_current_filepath pp) token.line
-              token.col "maximum include depth exceeded" 1
-          end;
-
-          let new_pp = append_source pp filepath in
-          new_pp
-        with Sys_error error_msg ->
+      match append_source pp filepath with
+      | Ok new_pp -> new_pp
+      | Error FileNotFound ->
           Diagnostics.emit_fatal_error (get_current_filepath pp) token.line
-            token.col error_msg 1
-      end
+            token.col
+            (Printf.sprintf "'%s' file not found" filepath)
+            1
+      | Error (IOError msg) ->
+          Diagnostics.emit_fatal_error (get_current_filepath pp) token.line
+            token.col msg 1
+    end
   | _ -> begin
       Printf.printf "Expect headername, got: %s"
         (Token.to_string token pp.source_manager);
@@ -137,22 +132,21 @@ let process_directive (pp : t) : t =
   | NewLine -> update_lexer pp lexer
   | _ -> process_directive_invalid pp
 
-let init filepath =
-  let filepath = Source.make_absolute_path filepath in
-
+let create (filepath : string) : (t, Source.load_error) result =
   let source_manager = Source.empty_manager in
-  let new_manager, source_id, source =
+  let* new_manager, source_id, source =
     Source.load_file source_manager filepath
   in
   let lexer = Lexer.create source_id source in
 
-  {
-    defines = [];
-    include_stack_printed = false;
-    source_manager = new_manager;
-    source_stack =
-      { current = { id = source_id; source; lexer }; rest = []; size = 0 };
-  }
+  Ok
+    {
+      defines = [];
+      include_stack_printed = false;
+      source_manager = new_manager;
+      source_stack =
+        { current = { id = source_id; source; lexer }; rest = []; size = 0 };
+    }
 
 let rec next_token (pp : t) : Token.t * t =
   let token, lexer = lex_current pp in
@@ -168,12 +162,13 @@ let rec next_token (pp : t) : Token.t * t =
       next_token pp
   | _ -> (token, update_lexer pp lexer)
 
-let tokenize_all (filepath : string) : Token.t list * Source.manager =
+let tokenize_all (filepath : string) :
+    (Token.t list * Source.manager, Source.load_error) result =
   let rec helper (pp : t) (acc : Token.t list) : Token.t list * Source.manager =
     let tok, pp = next_token pp in
     match tok.kind with
     | Eof -> (List.rev (tok :: acc), pp.source_manager)
     | _ -> helper pp (tok :: acc)
   in
-  let pp = init filepath in
-  helper pp []
+  let* pp = create filepath in
+  Ok (helper pp [])
