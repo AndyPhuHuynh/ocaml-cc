@@ -114,10 +114,7 @@ let process_directive_include (pp : t) (include_location : location) : t =
   let pp = update_lexer pp lexer in
   match token.kind with
   | HeaderName { filepath = ""; _ } ->
-      let pp =
-        emit_error pp token.line token.col
-          "empty filename in #include directive"
-      in
+      let pp = emit_error pp token.line token.col "empty filename" in
       skip_line pp
   | HeaderName { filepath; _ } -> begin
       let filepath =
