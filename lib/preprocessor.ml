@@ -30,7 +30,7 @@ let print_include_stack (pp : t) : unit =
         line col)
     stack
 
-let emit_error (pp : t) (line : int) (col : int) (msg : string) : t =
+let emit_error (pp : t) (diag : Diagnostics.t) : t =
   let new_pp =
     if not pp.include_stack_printed then begin
       print_include_stack pp;
@@ -38,15 +38,14 @@ let emit_error (pp : t) (line : int) (col : int) (msg : string) : t =
     end
     else None
   in
-  Diagnostics.emit_error (get_current_filepath pp) line col msg;
+  Diagnostics.emit_error diag;
   Option.value new_pp ~default:pp
 
-let emit_fatal_error (pp : t) (line : int) (col : int) (msg : string)
-    (exit_code : int) : 'a =
+let emit_fatal_error (pp : t) (diag : Diagnostics.t) (exit_code : int) : 'a =
   if not pp.include_stack_printed then begin
     print_include_stack pp
   end;
-  Diagnostics.emit_fatal_error (get_current_filepath pp) line col msg exit_code
+  Diagnostics.emit_fatal_error diag
 
 let get_paths_from_include (current_file : string) (include_ : string) =
   Filename.concat (Filename.dirname current_file) include_
@@ -114,7 +113,12 @@ let process_directive_include (pp : t) (include_location : location) : t =
   let pp = update_lexer pp lexer in
   match token.kind with
   | HeaderName { filepath = ""; _ } ->
-      let pp = emit_error pp token.line token.col "empty filename" in
+      let pp =
+        emit_error pp
+          (Diagnostics.at (get_current_source pp)
+             (Diagnostics.make_loc token.line token.col)
+             "empty filename")
+      in
       skip_line pp
   | HeaderName { filepath; _ } -> begin
       let filepath =
@@ -122,20 +126,27 @@ let process_directive_include (pp : t) (include_location : location) : t =
       in
 
       if pp.source_stack.size >= 256 then begin
-        Diagnostics.emit_fatal_error (get_current_filepath pp) token.line
-          token.col "maximum include depth exceeded" 1
+        Diagnostics.emit_fatal_error
+          (Diagnostics.at (get_current_source pp)
+             (Diagnostics.make_loc token.line token.col)
+             "maximum include depth exceeded")
+          1
       end;
 
       match append_source pp filepath include_location with
       | Ok new_pp -> new_pp
       | Error FileNotFound ->
-          Diagnostics.emit_fatal_error (get_current_filepath pp) token.line
-            token.col
-            (Printf.sprintf "'%s' file not found" filepath)
+          Diagnostics.emit_fatal_error
+            (Diagnostics.at (get_current_source pp)
+               (Diagnostics.make_loc token.line token.col)
+               (Printf.sprintf "'%s' file not found" filepath))
             1
       | Error (IOError msg) ->
-          Diagnostics.emit_fatal_error (get_current_filepath pp) token.line
-            token.col msg 1
+          Diagnostics.emit_fatal_error
+            (Diagnostics.at (get_current_source pp)
+               (Diagnostics.make_loc token.line token.col)
+               msg)
+            1
     end
   | _ -> begin
       Printf.printf "Expect headername, got: %s"
@@ -149,7 +160,10 @@ let rec process_directive_invalid (pp : t) : t =
     Printf.sprintf "invalid preprocessing directive: %s"
       (Source.span_to_string invalid.span pp.source_manager)
   in
-  Diagnostics.emit_error (get_current_filepath pp) invalid.line invalid.col msg;
+  Diagnostics.emit_error
+    (Diagnostics.at (get_current_source pp)
+       (Diagnostics.make_loc invalid.line invalid.col)
+       msg);
   skip_line pp
 
 let process_directive (pp : t) (hash_location : location) : t =

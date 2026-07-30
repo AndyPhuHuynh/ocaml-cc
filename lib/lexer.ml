@@ -121,8 +121,10 @@ let find_line_splice_sequence (lexer : t) : splice list =
   helper lexer []
 
 let emit_splice_diagnostic (splice : splice) : unit =
-  Diagnostics.emit_warning splice.lexer.source.filepath splice.line splice.col
-    "backslash and newline separated by whitespace"
+  Diagnostics.emit_warning
+    (Diagnostics.at splice.lexer.source
+       (Diagnostics.make_loc splice.line splice.col)
+       "backslash and newline separated by whitespace")
 
 let rec last_elem = function
   | [] -> failwith "last_elem called with empty list"

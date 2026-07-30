@@ -1,4 +1,4 @@
-type t = { filepath : string; contents : string }
+type t = { filepath : string; contents : string; line_offsets : int array }
 type id
 type span = { source_id : id; start : int; length : int }
 type manager
@@ -12,4 +12,5 @@ val load_file : manager -> string -> (manager * id * t, load_error) result
 (** [load_file] accepts the [manager] and an *absolute* [filepath]. *)
 
 val get_source : manager -> id -> t
+val get_line : t -> int -> string
 val span_to_string : span -> manager -> string
