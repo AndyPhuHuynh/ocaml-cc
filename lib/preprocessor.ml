@@ -116,35 +116,37 @@ let process_directive_include (pp : t) (include_location : location) : t =
       let pp =
         emit_error pp
           (Diagnostics.at (get_current_source pp)
-             (Diagnostics.make_loc token.line token.col)
+             (Source.make_loc token.line token.col)
              "empty filename")
       in
       skip_line pp
   | HeaderName { filepath; _ } -> begin
-      let filepath =
+      let full_path =
         get_paths_from_include (get_current_filepath pp) filepath
       in
 
       if pp.source_stack.size >= 256 then begin
         Diagnostics.emit_fatal_error
           (Diagnostics.at (get_current_source pp)
-             (Diagnostics.make_loc token.line token.col)
+             (Source.make_loc token.line token.col)
              "maximum include depth exceeded")
           1
       end;
 
-      match append_source pp filepath include_location with
+      match append_source pp full_path include_location with
       | Ok new_pp -> new_pp
       | Error FileNotFound ->
+          let source = get_current_source pp in
           Diagnostics.emit_fatal_error
-            (Diagnostics.at (get_current_source pp)
-               (Diagnostics.make_loc token.line token.col)
+            (Diagnostics.range source
+               (Source.make_loc token.line token.col)
+               (Source.get_span_end source token.span)
                (Printf.sprintf "'%s' file not found" filepath))
             1
       | Error (IOError msg) ->
           Diagnostics.emit_fatal_error
             (Diagnostics.at (get_current_source pp)
-               (Diagnostics.make_loc token.line token.col)
+               (Source.make_loc token.line token.col)
                msg)
             1
     end
@@ -162,7 +164,7 @@ let rec process_directive_invalid (pp : t) : t =
   in
   Diagnostics.emit_error
     (Diagnostics.at (get_current_source pp)
-       (Diagnostics.make_loc invalid.line invalid.col)
+       (Source.make_loc invalid.line invalid.col)
        msg);
   skip_line pp
 

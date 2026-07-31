@@ -1,15 +1,12 @@
-type loc = { line : int; col : int }
-
 type t = {
   source : Source.t;
-  highlight_start : loc;
-  highlight_end : loc option;
+  highlight_start : Source.loc;
+  highlight_end : Source.loc option;
   message : string;
 }
 
-val make_loc : int -> int -> loc
-val at : Source.t -> loc -> string -> t
-val range : Source.t -> loc -> loc -> string -> t
+val at : Source.t -> Source.loc -> string -> t
+val range : Source.t -> Source.loc -> Source.loc -> string -> t
 val emit_warning : t -> unit
 val emit_error : t -> unit
 

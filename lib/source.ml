@@ -1,5 +1,6 @@
 type t = { filepath : string; contents : string; line_offsets : int array }
 type id = int
+type loc = { line : int; col : int }
 type span = { source_id : id; start : int; length : int }
 
 module IntMap = Map.Make (Int)
@@ -29,6 +30,11 @@ let calculate_line_offsets (contents : string) : int array =
   in
 
   if contents = "" then [||] else helper 0 [ 0 ]
+
+let make_loc (line : int) (col : int) : loc = { line; col }
+
+let is_loc_after (loc1 : loc) (loc2 : loc) : bool =
+  loc1.line > loc2.line || (loc1.line = loc2.line && loc1.col > loc2.col)
 
 let make_absolute_path (path : string) =
   if Filename.is_relative path then Filename.concat (Sys.getcwd ()) path
@@ -86,6 +92,23 @@ let load_file (manager : manager) (filepath : string) :
 
 let get_source (manager : manager) (id : id) : t =
   IntMap.find id manager.from_id
+
+let get_line_from_pos (offsets : int array) (pos : int) : int =
+  let rec loop (lo : int) (hi : int) : int =
+    if lo > hi then hi
+    else
+      let mid = lo + ((hi - lo) / 2) in
+      if offsets.(mid) <= pos then loop (mid + 1) hi else loop lo (mid - 1)
+  in
+
+  loop 0 (Array.length offsets - 1) + 1
+
+let get_span_end (source : t) (span : span) : loc =
+  let total_pos = span.start + span.length - 1 in
+  let line = get_line_from_pos source.line_offsets total_pos in
+  let offset = source.line_offsets.(line - 1) in
+  let col = total_pos - offset + 1 in
+  { line; col }
 
 let span_to_string (span : span) (manager : manager) : string =
   let source = get_source manager span.source_id in

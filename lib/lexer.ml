@@ -123,7 +123,7 @@ let find_line_splice_sequence (lexer : t) : splice list =
 let emit_splice_diagnostic (splice : splice) : unit =
   Diagnostics.emit_warning
     (Diagnostics.at splice.lexer.source
-       (Diagnostics.make_loc splice.line splice.col)
+       (Source.make_loc splice.line splice.col)
        "backslash and newline separated by whitespace")
 
 let rec last_elem = function
@@ -445,19 +445,23 @@ let lex_token lexer =
       end
 
 let lex_header_name lexer =
-  let rec continue_lexing (lexer : t) (type_ : Token.header_type) : Token.t * t
-      =
-    let finish_lexing (lexer : t) (type_ : Token.header_type) =
-      let filepath = make_string_from_start_pos lexer (lexer.start.pos + 1) in
+  let rec continue_lexing (lexer : t) (buffer : Buffer.t)
+      (type_ : Token.header_type) : Token.t * t =
+    let finish_lexing (lexer : t) (buf : Buffer.t) (type_ : Token.header_type) =
+      let filepath = Buffer.contents buf in
       make_token (Token.HeaderName { filepath; type_ }) (advance_char lexer)
     in
     match peek_char lexer with
-    | Some '>' when type_ = Token.NonLocal -> finish_lexing lexer Token.NonLocal
-    | Some '"' when type_ = Token.Local -> finish_lexing lexer Token.Local
+    | Some '>' when type_ = Token.NonLocal ->
+        finish_lexing lexer buffer Token.NonLocal
+    | Some '"' when type_ = Token.Local ->
+        finish_lexing lexer buffer Token.Local
     | Some '\n' | None ->
         make_token (Token.Invalid Token.UnterminatedHeaderName)
           (advance_char lexer)
-    | _ -> continue_lexing (advance_char lexer) type_
+    | Some c ->
+        Buffer.add_char buffer c;
+        continue_lexing (advance_char lexer) buffer type_
   in
 
   let lexer, tok = skip_whitespace lexer in
@@ -466,8 +470,10 @@ let lex_header_name lexer =
   | None -> begin
       let lexer = { lexer with start = lexer.position } in
       match peek_char lexer with
-      | Some '<' -> continue_lexing (advance_char lexer) Token.NonLocal
-      | Some '"' -> continue_lexing (advance_char lexer) Token.Local
+      | Some '<' ->
+          continue_lexing (advance_char lexer) (Buffer.create 16) Token.NonLocal
+      | Some '"' ->
+          continue_lexing (advance_char lexer) (Buffer.create 16) Token.Local
       | _ -> lex_token lexer
     end
 
