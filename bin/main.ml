@@ -15,8 +15,9 @@ let () =
   | Ok (tokens, source_manager) ->
       List.iter
         (fun tok ->
-          print_endline
-            (Token.to_string (Token_converter.convert_token tok) source_manager))
+          match Token_converter.convert_token tok with
+          | Ok tok -> print_endline (Token.to_string tok source_manager)
+          | Error _ -> ())
         tokens
   | Error FileNotFound ->
       Diagnostics.emit_driver_error

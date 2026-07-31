@@ -1,6 +1,8 @@
 type header_type = Local | NonLocal
 type header_name = { filepath : string; type_ : header_type }
 type int_literal = { value : Z.t; suffix : string option }
+type spliced_string_pos = { index : int; pos : int }
+type spliced_string = { string : string; splices : spliced_string_pos list }
 
 type invalid =
   | UnterminatedCharLiteral
@@ -13,6 +15,7 @@ type kind =
   (* Preprocessing *)
   | HeaderName of header_name
   | PPNumber of string
+  | PPString of spliced_string
   (* Keywords *)
   | Auto
   | Break

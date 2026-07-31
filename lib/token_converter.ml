@@ -1,21 +1,26 @@
-type string_error = InvalidEscape of int
+type string_error = InvalidEscape of { start : int; finish : int }
+type convert_error = StringError of string_error list
 
 let print_string_error (original_str : string) (err : string_error) : unit =
   match err with
   | InvalidEscape i ->
-      Printf.printf "Invalid escape character at index %d: %s" i original_str
+      Printf.printf "Invalid escape character at index %d-%d: %s\n" i.start
+        i.finish original_str
 
 let print_string_errors (original_str : string) (errors : string_error list) :
     unit =
   List.iter (fun e -> print_string_error original_str e) errors
 
-let convert_string (s : string) : string * string_error list =
+let convert_string (s : string) : (string, string_error list) result =
   let len = String.length s in
   let buf = Buffer.create len in
 
   let rec helper (i : int) (errors : string_error list) :
-      string * string_error list =
-    if i >= len then (Buffer.contents buf, List.rev errors)
+      (string, string_error list) result =
+    if i >= len then
+      match errors with
+      | [] -> Ok (Buffer.contents buf)
+      | _ -> Error (List.rev errors)
     else
       match s.[i] with
       | '\\' when i + 1 < len -> begin
@@ -45,9 +50,13 @@ let convert_string (s : string) : string * string_error list =
           | 'r' ->
               Buffer.add_char buf '\x0d';
               helper (i + 2) errors
+          | 'e' ->
+              Buffer.add_char buf '\x1b';
+              helper (i + 2) errors
           | _ ->
               Buffer.add_char buf c;
-              helper (i + 2) (InvalidEscape i :: errors)
+              helper (i + 2)
+                (InvalidEscape { start = i; finish = i + 1 } :: errors)
         end
       | c ->
           Buffer.add_char buf c;
@@ -98,19 +107,26 @@ let keyword_of_string (s : string) : Token.kind option =
   | "_Imaginary" -> Some Imaginary
   | _ -> None
 
-let convert_token (token : Token.t) : Token.t =
+let convert_token (token : Token.t) : (Token.t, convert_error) result =
   match token.kind with
   | Identifier name ->
       begin match keyword_of_string name with
-      | Some kind -> { token with kind }
-      | None -> token
+      | Some kind -> Ok { token with kind }
+      | None -> Ok token
       end
   | CharLiteral str ->
-      let new_str, errors = convert_string str in
-      print_string_errors str errors;
-      { token with kind = CharLiteral new_str }
-  | StringLiteral str ->
-      let new_str, errors = convert_string str in
-      print_string_errors str errors;
-      { token with kind = StringLiteral new_str }
-  | _ -> token
+      begin match convert_string str with
+      | Ok new_str -> Ok { token with kind = CharLiteral new_str }
+      | Error errors ->
+          print_string_errors str errors;
+          Error (StringError errors)
+      end
+  | StringLiteral str -> begin
+      begin match convert_string str with
+      | Ok new_str -> Ok { token with kind = StringLiteral new_str }
+      | Error errors ->
+          print_string_errors str errors;
+          Error (StringError errors)
+      end
+    end
+  | _ -> Ok token

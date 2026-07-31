@@ -131,6 +131,20 @@ let rec last_elem = function
   | [ x ] -> x
   | x :: xs -> last_elem xs
 
+type char_view = { char : char; pos : int; splice_encountered : bool }
+
+let peek_char_view (lexer : t) : char_view option =
+  let lexer, splice_encountered =
+    match find_line_splice_sequence lexer with
+    | [] -> (lexer, false)
+    | xs -> ((last_elem xs).lexer, true)
+  in
+
+  let c = at_index lexer in
+  match c with
+  | None -> None
+  | Some c -> Some { char = c; pos = lexer.position.pos; splice_encountered }
+
 let peek_char (lexer : t) : char option =
   let lexer =
     match find_line_splice_sequence lexer with
@@ -372,30 +386,49 @@ let lex_char_literal (lexer : t) : Token.t * t =
   helper lexer (Buffer.create 1)
 
 let lex_string_literal (lexer : t) : Token.t * t =
-  let rec helper (lexer : t) (buf : Buffer.t) : Token.t * t =
-    match peek_char lexer with
-    | Some '"' -> begin
-        let lexer = advance_char lexer in
-        make_token (Token.StringLiteral (Buffer.contents buf)) lexer
-      end
-    | None | Some '\n' -> begin
+  let update_buf_and_splices (buf : Buffer.t)
+      (splices : Token.spliced_string_pos list) (char_view : char_view) :
+      Token.spliced_string_pos list =
+    Buffer.add_char buf char_view.char;
+    match splices with
+    | [] -> [ { index = Buffer.length buf - 1; pos = char_view.pos } ]
+    | _ ->
+        if char_view.splice_encountered then begin
+          let index = Buffer.length buf - 1 in
+          { index; pos = char_view.pos } :: splices
+        end
+        else splices
+  in
+
+  let rec helper (lexer : t) (buf : Buffer.t)
+      (splices : Token.spliced_string_pos list) : Token.t * t =
+    match peek_char_view lexer with
+    | None | Some { char = '\n'; _ } -> begin
         let lexer = advance_char lexer in
         make_token (Token.Invalid Token.UnterminatedStringLiteral) lexer
       end
-    | Some '\\' -> begin
-        Buffer.add_char buf '\\';
+    | Some { char = '"'; _ } -> begin
+        let lexer = advance_char lexer in
+        make_token
+          (Token.PPString
+             { string = Buffer.contents buf; splices = List.rev splices })
+          lexer
+      end
+    | Some c when c.char = '\\' -> begin
+        let splices = update_buf_and_splices buf splices c in
         let next_lexer = advance_char lexer in
-        match peek_char next_lexer with
-        | Some '"' ->
-            Buffer.add_char buf '"';
-            helper (advance_char next_lexer) buf
-        | _ -> helper next_lexer buf
+
+        match peek_char_view next_lexer with
+        | Some c when c.char = '"' ->
+            let splices = update_buf_and_splices buf splices c in
+            helper (advance_char next_lexer) buf splices
+        | _ -> helper next_lexer buf splices
       end
     | Some c ->
-        Buffer.add_char buf c;
-        helper (advance_char lexer) buf
+        let splices = update_buf_and_splices buf splices c in
+        helper (advance_char lexer) buf splices
   in
-  helper lexer (Buffer.create 1)
+  helper lexer (Buffer.create 1) []
 
 let lex_token lexer =
   let lexer, tok = skip_whitespace lexer in
