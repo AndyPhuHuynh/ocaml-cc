@@ -2,6 +2,8 @@ type t = { filepath : string; contents : string; line_offsets : int array }
 type id = int
 type loc = { line : int; col : int }
 type span = { source_id : id; start : int; length : int }
+type string_pos = { index : int; pos : int }
+type string_src = { string : string; positions : string_pos list }
 
 module IntMap = Map.Make (Int)
 module StringMap = Map.Make (String)
@@ -35,6 +37,20 @@ let make_loc (line : int) (col : int) : loc = { line; col }
 
 let is_loc_after (loc1 : loc) (loc2 : loc) : bool =
   loc1.line > loc2.line || (loc1.line = loc2.line && loc1.col > loc2.col)
+
+let get_loc_from_pos (source : t) (pos : int) : loc =
+  let rec loop (lo : int) (hi : int) : int =
+    if lo > hi then hi
+    else
+      let mid = lo + ((hi - lo) / 2) in
+      if source.line_offsets.(mid) <= pos then loop (mid + 1) hi
+      else loop lo (mid - 1)
+  in
+
+  let index = loop 0 (Array.length source.line_offsets - 1) in
+  let line = index + 1 in
+  let col = pos - source.line_offsets.(index) + 1 in
+  { line; col }
 
 let make_absolute_path (path : string) =
   if Filename.is_relative path then Filename.concat (Sys.getcwd ()) path
@@ -113,3 +129,16 @@ let get_span_end (source : t) (span : span) : loc =
 let span_to_string (span : span) (manager : manager) : string =
   let source = get_source manager span.source_id in
   String.sub source.contents span.start span.length
+
+let string_index_to_source_pos (index : int) (positions : string_pos list) : int
+    =
+  let rec find_base_pos (positions : string_pos list) : string_pos =
+    match positions with
+    | [] -> failwith "index_to_source_pos failed with empty positions"
+    | [ x ] -> x
+    | a :: b :: xs -> if b.index > index then a else find_base_pos (b :: xs)
+  in
+
+  let base_pos = find_base_pos positions in
+  let offset = index - base_pos.index in
+  base_pos.pos + offset

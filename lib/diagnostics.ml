@@ -12,6 +12,11 @@ let range (source : Source.t) (start : Source.loc) (end_ : Source.loc)
     (message : string) : t =
   { source; highlight_start = start; highlight_end = Some end_; message }
 
+let from_span (source : Source.t) (span : Source.span) (message : string) : t =
+  let start = Source.get_loc_from_pos source span.start in
+  let end_ = Source.get_span_end source span in
+  range source start end_ message
+
 let emit_line (line_num : int) (line_num_padding : int) (line : string) : unit =
   Printf.eprintf "%*d | %s\n" line_num_padding line_num line
 

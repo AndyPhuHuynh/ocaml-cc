@@ -1,5 +1,4 @@
-type string_error = InvalidEscape of { start : int; finish : int }
+type string_error = InvalidEscape of { seq : string; span : Source.span }
 type convert_error = StringError of string_error list
 
-val convert_string : string -> (string, string_error list) result
-val convert_token : Token.t -> (Token.t, convert_error) result
+val convert_token : Token.t -> Source.manager -> (Token.t, convert_error) result

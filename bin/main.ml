@@ -1,5 +1,12 @@
 open Ocaml_cc
 
+let print_string_error (source : Source.t) (e : Token_converter.string_error) :
+    unit =
+  match e with
+  | InvalidEscape { seq; span } ->
+      let msg = Printf.sprintf "Invalid seq: %s" seq in
+      Diagnostics.emit_error (Diagnostics.from_span source span msg)
+
 let () =
   let usage_msg = "ocaml-cc -i <input>" in
   let input_file = ref "" in
@@ -15,9 +22,15 @@ let () =
   | Ok (tokens, source_manager) ->
       List.iter
         (fun tok ->
-          match Token_converter.convert_token tok with
+          match Token_converter.convert_token tok source_manager with
           | Ok tok -> print_endline (Token.to_string tok source_manager)
-          | Error _ -> ())
+          | Error (StringError invalid_escapes) ->
+              List.iter
+                (fun e ->
+                  print_string_error
+                    (Source.get_source source_manager tok.span.source_id)
+                    e)
+                invalid_escapes)
         tokens
   | Error FileNotFound ->
       Diagnostics.emit_driver_error

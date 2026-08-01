@@ -1,8 +1,6 @@
 type header_type = Local | NonLocal
 type header_name = { filepath : string; type_ : header_type }
 type int_literal = { value : Z.t; suffix : string option }
-type spliced_string_pos = { index : int; pos : int }
-type spliced_string = { string : string; splices : spliced_string_pos list }
 
 type invalid =
   | UnterminatedCharLiteral
@@ -15,7 +13,7 @@ type kind =
   (* Preprocessing *)
   | HeaderName of header_name
   | PPNumber of string
-  | PPString of spliced_string
+  | PPString of Source.string_src
   (* Keywords *)
   | Auto
   | Break
@@ -127,8 +125,8 @@ type t = {
 let header_type_to_string (type_ : header_type) =
   match type_ with Local -> "Local" | NonLocal -> "NonLocal"
 
-let display_splices (s : spliced_string_pos list) : string =
-  let rec helper (list : spliced_string_pos list) (acc : string) : string =
+let display_source_positions (s : Source.string_pos list) : string =
+  let rec helper (list : Source.string_pos list) (acc : string) : string =
     match list with
     | [] -> acc
     | { index; pos } :: xs -> begin
@@ -147,7 +145,7 @@ let kind_to_string = function
   | PPNumber value -> Printf.sprintf "PPNumber {%s}" value
   | PPString value ->
       Printf.sprintf "PPString { value: '%s'; splices: [%s]}" value.string
-        (display_splices value.splices)
+        (display_source_positions value.positions)
   (* Keywords *)
   | Auto -> "auto"
   | Break -> "break"

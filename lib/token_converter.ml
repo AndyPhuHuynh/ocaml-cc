@@ -1,22 +1,29 @@
-type string_error = InvalidEscape of { start : int; finish : int }
+type string_error_proto =
+  | P_InvalidEscape of { seq : string; start : int; finish : int }
+
+type string_error = InvalidEscape of { seq : string; span : Source.span }
 type convert_error = StringError of string_error list
 
-let print_string_error (original_str : string) (err : string_error) : unit =
-  match err with
-  | InvalidEscape i ->
-      Printf.printf "Invalid escape character at index %d-%d: %s\n" i.start
-        i.finish original_str
+let convert_string_error (e : string_error_proto) (source_id : Source.id)
+    (source : Source.t) (positions : Source.string_pos list) : string_error =
+  match e with
+  | P_InvalidEscape e ->
+      let start = Source.string_index_to_source_pos e.start positions in
+      let finish = Source.string_index_to_source_pos e.finish positions in
+      let length = finish - start + 1 in
+      InvalidEscape { seq = e.seq; span = { source_id; start; length } }
 
-let print_string_errors (original_str : string) (errors : string_error list) :
-    unit =
-  List.iter (fun e -> print_string_error original_str e) errors
+let convert_string_errors (es : string_error_proto list) (source_id : Source.id)
+    (source : Source.t) (positions : Source.string_pos list) : string_error list
+    =
+  List.map (fun e -> convert_string_error e source_id source positions) es
 
-let convert_string (s : string) : (string, string_error list) result =
+let convert_string (s : string) : (string, string_error_proto list) result =
   let len = String.length s in
   let buf = Buffer.create len in
 
-  let rec helper (i : int) (errors : string_error list) :
-      (string, string_error list) result =
+  let rec helper (i : int) (errors : string_error_proto list) :
+      (string, string_error_proto list) result =
     if i >= len then
       match errors with
       | [] -> Ok (Buffer.contents buf)
@@ -53,10 +60,12 @@ let convert_string (s : string) : (string, string_error list) result =
           | 'e' ->
               Buffer.add_char buf '\x1b';
               helper (i + 2) errors
-          | _ ->
+          | c ->
               Buffer.add_char buf c;
               helper (i + 2)
-                (InvalidEscape { start = i; finish = i + 1 } :: errors)
+                (P_InvalidEscape
+                   { seq = Printf.sprintf "\\%c" c; start = i; finish = i + 1 }
+                :: errors)
         end
       | c ->
           Buffer.add_char buf c;
@@ -107,26 +116,35 @@ let keyword_of_string (s : string) : Token.kind option =
   | "_Imaginary" -> Some Imaginary
   | _ -> None
 
-let convert_token (token : Token.t) : (Token.t, convert_error) result =
+let convert_token (token : Token.t) (manager : Source.manager) :
+    (Token.t, convert_error) result =
+  let source_id = token.span.source_id in
+  let source = Source.get_source manager source_id in
+
   match token.kind with
   | Identifier name ->
       begin match keyword_of_string name with
       | Some kind -> Ok { token with kind }
       | None -> Ok token
       end
-  | CharLiteral str ->
-      begin match convert_string str with
-      | Ok new_str -> Ok { token with kind = CharLiteral new_str }
-      | Error errors ->
-          print_string_errors str errors;
-          Error (StringError errors)
-      end
-  | StringLiteral str -> begin
-      begin match convert_string str with
+  (* | CharLiteral str -> *)
+  (*     begin match convert_string str with *)
+  (*     | Ok new_str -> Ok { token with kind = CharLiteral new_str } *)
+  (*     | Error errors -> *)
+  (*         print_string_errors str errors; *)
+  (*         Error *)
+  (*           (StringError *)
+  (*              (List.map *)
+  (*                 (fun e -> convert_string_error e source_id source ) *)
+  (*                 errors)) *)
+  (*     end *)
+  | PPString value -> begin
+      begin match convert_string value.string with
       | Ok new_str -> Ok { token with kind = StringLiteral new_str }
       | Error errors ->
-          print_string_errors str errors;
-          Error (StringError errors)
+          Error
+            (StringError
+               (convert_string_errors errors source_id source value.positions))
       end
     end
   | _ -> Ok token

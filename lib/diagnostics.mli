@@ -5,8 +5,12 @@ type t = {
   message : string;
 }
 
+(* diagnostic constructors *)
 val at : Source.t -> Source.loc -> string -> t
 val range : Source.t -> Source.loc -> Source.loc -> string -> t
+val from_span : Source.t -> Source.span -> string -> t
+
+(* emit functions *)
 val emit_warning : t -> unit
 val emit_error : t -> unit
 
