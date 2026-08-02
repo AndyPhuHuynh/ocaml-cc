@@ -36,6 +36,14 @@ let convert_string (s : string) : string * string_error_proto list =
   let len = String.length s in
   let buf = Buffer.create len in
 
+  let rec skip_octal_characters (i : int) (depth : int) =
+    if depth >= 3 then i
+    else
+      match s.[i] with
+      | '0' .. '7' -> skip_octal_characters (i + 1) (depth + 1)
+      | _ -> i
+  in
+
   let rec skip_hex_characters (i : int) : int =
     if i >= len then i
     else
@@ -79,6 +87,14 @@ let convert_string (s : string) : string * string_error_proto list =
           | 'e' ->
               Buffer.add_char buf '\x1b';
               helper (i + 2) errors
+          | '0' .. '7' ->
+              let octal_start = i + 1 in
+              let octal_end = skip_octal_characters octal_start 0 in
+              let octal_len = octal_end - octal_start in
+              let seq = String.sub s octal_start octal_len in
+              let value = Scanf.sscanf seq "%o" Fun.id in
+              Buffer.add_char buf (char_of_int value);
+              helper octal_end errors
           | 'x' ->
               let hex_start = i + 2 in
               let hex_end = skip_hex_characters hex_start in
