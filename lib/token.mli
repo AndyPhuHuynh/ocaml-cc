@@ -12,6 +12,7 @@ type invalid =
 type kind =
   (* Preprocessing *)
   | HeaderName of header_name
+  | PPChar of Source.string_src
   | PPNumber of string
   | PPString of Source.string_src
   (* Keywords *)

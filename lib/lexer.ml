@@ -177,6 +177,26 @@ let advance_char (lexer : t) : t =
 
   advance_index lexer
 
+type string_builder = {
+  buffer : Buffer.t;
+  mutable positions : Source.string_pos list;
+}
+
+let sb_create (buffer_size : int) : string_builder =
+  { buffer = Buffer.create buffer_size; positions = [] }
+
+let sb_add_char (sb : string_builder) (char_view : char_view) : unit =
+  Buffer.add_char sb.buffer char_view.char;
+  match sb.positions with
+  | [] ->
+      sb.positions <-
+        [ { index = Buffer.length sb.buffer - 1; pos = char_view.pos } ]
+  | _ ->
+      if char_view.splice_encountered then begin
+        let index = Buffer.length sb.buffer - 1 in
+        sb.positions <- { index; pos = char_view.pos } :: sb.positions
+      end
+
 let make_token (kind : Token.kind) (lexer : t) : Token.t * t =
   let is_at_line_start = lexer.next_token_starts_line in
   let lexer = { lexer with next_token_starts_line = kind = Token.NewLine } in
@@ -359,48 +379,41 @@ let rec lex_identifier (lexer : t) : Token.t * t =
         lexer
 
 let lex_char_literal (lexer : t) : Token.t * t =
-  let rec helper (lexer : t) (buf : Buffer.t) : Token.t * t =
-    match peek_char lexer with
-    | Some '\'' -> begin
+  let rec helper (lexer : t) (sb : string_builder) : Token.t * t =
+    match peek_char_view lexer with
+    | Some { char = '\''; _ } -> begin
         let lexer = advance_char lexer in
-        make_token (Token.CharLiteral (Buffer.contents buf)) lexer
+        make_token
+          (Token.PPChar
+             {
+               string = Buffer.contents sb.buffer;
+               positions = List.rev sb.positions;
+             })
+          lexer
       end
-    | None | Some '\n' -> begin
+    | None | Some { char = '\n'; _ } -> begin
         let lexer = advance_char lexer in
         make_token (Token.Invalid Token.UnterminatedCharLiteral) lexer
       end
-    | Some '\\' -> begin
-        Buffer.add_char buf '\\';
+    | Some ({ char = '\\'; _ } as c) -> begin
+        sb_add_char sb c;
         let next_lexer = advance_char lexer in
-        match peek_char next_lexer with
-        | Some '\'' ->
-            Buffer.add_char buf '\'';
-            helper (advance_char next_lexer) buf
-        | _ -> helper next_lexer buf
+
+        match peek_char_view next_lexer with
+        | Some ({ char = '\''; _ } as c) ->
+            sb_add_char sb c;
+            helper (advance_char next_lexer) sb
+        | _ -> helper next_lexer sb
       end
     | Some c ->
-        Buffer.add_char buf c;
-        helper (advance_char lexer) buf
+        sb_add_char sb c;
+        helper (advance_char lexer) sb
   in
 
-  helper lexer (Buffer.create 1)
+  helper lexer (sb_create 2)
 
 let lex_string_literal (lexer : t) : Token.t * t =
-  let update_buf_and_pos (buf : Buffer.t) (positions : Source.string_pos list)
-      (char_view : char_view) : Source.string_pos list =
-    Buffer.add_char buf char_view.char;
-    match positions with
-    | [] -> [ { index = Buffer.length buf - 1; pos = char_view.pos } ]
-    | _ ->
-        if char_view.splice_encountered then begin
-          let index = Buffer.length buf - 1 in
-          { index; pos = char_view.pos } :: positions
-        end
-        else positions
-  in
-
-  let rec helper (lexer : t) (buf : Buffer.t) (splices : Source.string_pos list)
-      : Token.t * t =
+  let rec helper (lexer : t) (sb : string_builder) : Token.t * t =
     match peek_char_view lexer with
     | None | Some { char = '\n'; _ } -> begin
         let lexer = advance_char lexer in
@@ -409,25 +422,28 @@ let lex_string_literal (lexer : t) : Token.t * t =
     | Some { char = '"'; _ } -> begin
         let lexer = advance_char lexer in
         let spliced_str : Source.string_src =
-          { string = Buffer.contents buf; positions = List.rev splices }
+          {
+            string = Buffer.contents sb.buffer;
+            positions = List.rev sb.positions;
+          }
         in
         make_token (Token.PPString spliced_str) lexer
       end
     | Some ({ char = '\\'; _ } as c) -> begin
-        let splices = update_buf_and_pos buf splices c in
+        sb_add_char sb c;
         let next_lexer = advance_char lexer in
 
         match peek_char_view next_lexer with
         | Some ({ char = '"'; _ } as c) ->
-            let splices = update_buf_and_pos buf splices c in
-            helper (advance_char next_lexer) buf splices
-        | _ -> helper next_lexer buf splices
+            sb_add_char sb c;
+            helper (advance_char next_lexer) sb
+        | _ -> helper next_lexer sb
       end
     | Some c ->
-        let splices = update_buf_and_pos buf splices c in
-        helper (advance_char lexer) buf splices
+        sb_add_char sb c;
+        helper (advance_char lexer) sb
   in
-  helper lexer (Buffer.create 1) []
+  helper lexer (sb_create 8)
 
 let lex_token lexer =
   let lexer, tok = skip_whitespace lexer in
@@ -447,7 +463,6 @@ let lex_token lexer =
           | '/' -> lex_slash lexer
           | '%' -> lex_percent lexer
           | '=' -> lex_equal lexer
-          | '!' -> lex_bang lexer
           | '<' -> lex_less lexer
           | '>' -> lex_greater lexer
           | '&' -> lex_and lexer

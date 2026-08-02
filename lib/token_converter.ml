@@ -2,7 +2,12 @@ type string_error_proto =
   | P_InvalidEscape of { seq : string; start : int; finish : int }
 
 type string_error = InvalidEscape of { seq : string; span : Source.span }
-type convert_error = StringError of string_error list
+type conversion_error = StringError of string_error list
+
+type conversion_result =
+  | Success of Token.t
+  | Recovered of Token.t * conversion_error
+  | Unrecoverable of conversion_error
 
 let convert_string_error (e : string_error_proto) (source_id : Source.id)
     (source : Source.t) (positions : Source.string_pos list) : string_error =
@@ -18,16 +23,13 @@ let convert_string_errors (es : string_error_proto list) (source_id : Source.id)
     =
   List.map (fun e -> convert_string_error e source_id source positions) es
 
-let convert_string (s : string) : (string, string_error_proto list) result =
+let convert_string (s : string) : string * string_error_proto list =
   let len = String.length s in
   let buf = Buffer.create len in
 
   let rec helper (i : int) (errors : string_error_proto list) :
-      (string, string_error_proto list) result =
-    if i >= len then
-      match errors with
-      | [] -> Ok (Buffer.contents buf)
-      | _ -> Error (List.rev errors)
+      string * string_error_proto list =
+    if i >= len then (Buffer.contents buf, List.rev errors)
     else
       match s.[i] with
       | '\\' when i + 1 < len -> begin
@@ -117,34 +119,36 @@ let keyword_of_string (s : string) : Token.kind option =
   | _ -> None
 
 let convert_token (token : Token.t) (manager : Source.manager) :
-    (Token.t, convert_error) result =
+    conversion_result =
   let source_id = token.span.source_id in
   let source = Source.get_source manager source_id in
 
   match token.kind with
   | Identifier name ->
       begin match keyword_of_string name with
-      | Some kind -> Ok { token with kind }
-      | None -> Ok token
+      | Some kind -> Success { token with kind }
+      | None -> Success token
       end
-  (* | CharLiteral str -> *)
-  (*     begin match convert_string str with *)
-  (*     | Ok new_str -> Ok { token with kind = CharLiteral new_str } *)
-  (*     | Error errors -> *)
-  (*         print_string_errors str errors; *)
-  (*         Error *)
-  (*           (StringError *)
-  (*              (List.map *)
-  (*                 (fun e -> convert_string_error e source_id source ) *)
-  (*                 errors)) *)
-  (*     end *)
-  | PPString value -> begin
+  | PPChar value -> begin
       begin match convert_string value.string with
-      | Ok new_str -> Ok { token with kind = StringLiteral new_str }
-      | Error errors ->
-          Error
-            (StringError
-               (convert_string_errors errors source_id source value.positions))
+      | new_str, [] -> Success { token with kind = CharLiteral new_str }
+      | new_str, errors ->
+          Recovered
+            ( { token with kind = CharLiteral new_str },
+              StringError
+                (convert_string_errors errors source_id source value.positions)
+            )
       end
     end
-  | _ -> Ok token
+  | PPString value -> begin
+      begin match convert_string value.string with
+      | new_str, [] -> Success { token with kind = StringLiteral new_str }
+      | new_str, errors ->
+          Recovered
+            ( { token with kind = StringLiteral new_str },
+              StringError
+                (convert_string_errors errors source_id source value.positions)
+            )
+      end
+    end
+  | _ -> Success token

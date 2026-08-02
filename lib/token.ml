@@ -12,6 +12,7 @@ type invalid =
 type kind =
   (* Preprocessing *)
   | HeaderName of header_name
+  | PPChar of Source.string_src
   | PPNumber of string
   | PPString of Source.string_src
   (* Keywords *)
@@ -142,6 +143,9 @@ let kind_to_string = function
   | HeaderName { filepath; type_ } ->
       Printf.sprintf "HeaderName { filepath: '%s', type: '%s'}" filepath
         (header_type_to_string type_)
+  | PPChar value ->
+      Printf.sprintf "PPChar { value: '%s'; splices: [%s]}" value.string
+        (display_source_positions value.positions)
   | PPNumber value -> Printf.sprintf "PPNumber {%s}" value
   | PPString value ->
       Printf.sprintf "PPString { value: '%s'; splices: [%s]}" value.string

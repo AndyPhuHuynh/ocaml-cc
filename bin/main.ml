@@ -5,7 +5,13 @@ let print_string_error (source : Source.t) (e : Token_converter.string_error) :
   match e with
   | InvalidEscape { seq; span } ->
       let msg = Printf.sprintf "Invalid seq: %s" seq in
-      Diagnostics.emit_error (Diagnostics.from_span source span msg)
+      Diagnostics.emit_warning (Diagnostics.from_span source span msg)
+
+let print_conversion_error (source : Source.t)
+    (e : Token_converter.conversion_error) : unit =
+  match e with
+  | StringError errors ->
+      List.iter (fun e -> print_string_error source e) errors
 
 let () =
   let usage_msg = "ocaml-cc -i <input>" in
@@ -19,19 +25,18 @@ let () =
   end;
 
   match Preprocessor.tokenize_all !input_file with
-  | Ok (tokens, source_manager) ->
+  | Ok (tokens, source_manager) -> begin
       List.iter
-        (fun tok ->
+        (fun (tok : Token.t) ->
+          let source = Source.get_source source_manager tok.span.source_id in
           match Token_converter.convert_token tok source_manager with
-          | Ok tok -> print_endline (Token.to_string tok source_manager)
-          | Error (StringError invalid_escapes) ->
-              List.iter
-                (fun e ->
-                  print_string_error
-                    (Source.get_source source_manager tok.span.source_id)
-                    e)
-                invalid_escapes)
+          | Success tok -> print_endline (Token.to_string tok source_manager)
+          | Recovered (tok, error) ->
+              print_endline (Token.to_string tok source_manager);
+              print_conversion_error source error
+          | Unrecoverable errors -> begin () end)
         tokens
+    end
   | Error FileNotFound ->
       Diagnostics.emit_driver_error
         (Printf.sprintf "file not found: %s" !input_file)

@@ -1,8 +1,7 @@
-"hello\
-world\
-hello"
-
 "abc\d\\
 z\\
 q"
 
+'def\g\\
+h\\
+k'
