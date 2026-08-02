@@ -3,9 +3,11 @@ open Ocaml_cc
 let print_string_error (source : Source.t) (e : Token_converter.string_error) :
     unit =
   match e with
-  | InvalidEscape { seq; span } ->
-      let msg = Printf.sprintf "Invalid seq: %s" seq in
-      Diagnostics.emit_warning (Diagnostics.from_span source span msg)
+  | InvalidEscape { seq_type; seq; span } -> (
+      match seq_type with
+      | SeqNormal ->
+          let msg = Printf.sprintf "unknown escape sequence '%s'" seq in
+          Diagnostics.emit_warning (Diagnostics.from_span source span msg))
 
 let print_conversion_error (source : Source.t)
     (e : Token_converter.conversion_error) : unit =
@@ -34,7 +36,7 @@ let () =
           | Recovered (tok, error) ->
               print_endline (Token.to_string tok source_manager);
               print_conversion_error source error
-          | Unrecoverable errors -> begin () end)
+          | Unrecoverable error -> print_conversion_error source error)
         tokens
     end
   | Error FileNotFound ->

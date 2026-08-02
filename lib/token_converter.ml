@@ -1,7 +1,20 @@
-type string_error_proto =
-  | P_InvalidEscape of { seq : string; start : int; finish : int }
+type escape_sequence = SeqNormal
 
-type string_error = InvalidEscape of { seq : string; span : Source.span }
+type string_error_proto =
+  | P_InvalidEscape of {
+      seq_type : escape_sequence;
+      seq : string;
+      start : int;
+      finish : int;
+    }
+
+type string_error =
+  | InvalidEscape of {
+      seq_type : escape_sequence;
+      seq : string;
+      span : Source.span;
+    }
+
 type conversion_error = StringError of string_error list
 
 type conversion_result =
@@ -16,7 +29,12 @@ let convert_string_error (e : string_error_proto) (source_id : Source.id)
       let start = Source.string_index_to_source_pos e.start positions in
       let finish = Source.string_index_to_source_pos e.finish positions in
       let length = finish - start + 1 in
-      InvalidEscape { seq = e.seq; span = { source_id; start; length } }
+      InvalidEscape
+        {
+          seq_type = e.seq_type;
+          seq = e.seq;
+          span = { source_id; start; length };
+        }
 
 let convert_string_errors (es : string_error_proto list) (source_id : Source.id)
     (source : Source.t) (positions : Source.string_pos list) : string_error list
@@ -66,7 +84,12 @@ let convert_string (s : string) : string * string_error_proto list =
               Buffer.add_char buf c;
               helper (i + 2)
                 (P_InvalidEscape
-                   { seq = Printf.sprintf "\\%c" c; start = i; finish = i + 1 }
+                   {
+                     seq_type = SeqNormal;
+                     seq = Printf.sprintf "\\%c" c;
+                     start = i;
+                     finish = i + 1;
+                   }
                 :: errors)
         end
       | c ->
