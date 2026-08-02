@@ -1,11 +1,10 @@
-type escape_sequence = SeqNormal
+type invalid_escape_type = SeqNormal | HexNoDigits | HexTooLarge
 
-type string_error =
-  | InvalidEscape of {
-      seq_type : escape_sequence;
-      seq : string;
-      span : Source.span;
-    }
+type string_error = {
+  seq_type : invalid_escape_type;
+  seq : string;
+  span : Source.span;
+}
 
 type conversion_error = StringError of string_error list
 

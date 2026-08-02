@@ -1,19 +1,17 @@
-type escape_sequence = SeqNormal
+type invalid_escape_type = SeqNormal | HexNoDigits | HexTooLarge
 
-type string_error_proto =
-  | P_InvalidEscape of {
-      seq_type : escape_sequence;
-      seq : string;
-      start : int;
-      finish : int;
-    }
+type string_error_proto = {
+  seq_type : invalid_escape_type;
+  seq : string;
+  start : int;
+  finish : int;
+}
 
-type string_error =
-  | InvalidEscape of {
-      seq_type : escape_sequence;
-      seq : string;
-      span : Source.span;
-    }
+type string_error = {
+  seq_type : invalid_escape_type;
+  seq : string;
+  span : Source.span;
+}
 
 type conversion_error = StringError of string_error list
 
@@ -24,17 +22,10 @@ type conversion_result =
 
 let convert_string_error (e : string_error_proto) (source_id : Source.id)
     (source : Source.t) (positions : Source.string_pos list) : string_error =
-  match e with
-  | P_InvalidEscape e ->
-      let start = Source.string_index_to_source_pos e.start positions in
-      let finish = Source.string_index_to_source_pos e.finish positions in
-      let length = finish - start + 1 in
-      InvalidEscape
-        {
-          seq_type = e.seq_type;
-          seq = e.seq;
-          span = { source_id; start; length };
-        }
+  let start = Source.string_index_to_source_pos e.start positions in
+  let finish = Source.string_index_to_source_pos e.finish positions in
+  let length = finish - start + 1 in
+  { seq_type = e.seq_type; seq = e.seq; span = { source_id; start; length } }
 
 let convert_string_errors (es : string_error_proto list) (source_id : Source.id)
     (source : Source.t) (positions : Source.string_pos list) : string_error list
@@ -44,6 +35,14 @@ let convert_string_errors (es : string_error_proto list) (source_id : Source.id)
 let convert_string (s : string) : string * string_error_proto list =
   let len = String.length s in
   let buf = Buffer.create len in
+
+  let rec skip_hex_characters (i : int) : int =
+    if i >= len then i
+    else
+      match s.[i] with
+      | '0' .. '9' | 'a' .. 'z' | 'A' .. 'Z' -> skip_hex_characters (i + 1)
+      | _ -> i
+  in
 
   let rec helper (i : int) (errors : string_error_proto list) :
       string * string_error_proto list =
@@ -80,16 +79,47 @@ let convert_string (s : string) : string * string_error_proto list =
           | 'e' ->
               Buffer.add_char buf '\x1b';
               helper (i + 2) errors
-          | c ->
-              Buffer.add_char buf c;
-              helper (i + 2)
-                (P_InvalidEscape
-                   {
-                     seq_type = SeqNormal;
-                     seq = Printf.sprintf "\\%c" c;
+          | 'x' ->
+              let hex_start = i + 2 in
+              let hex_end = skip_hex_characters hex_start in
+              let hex_len = hex_end - hex_start in
+              if hex_len = 0 then begin
+                Buffer.add_char buf 'x';
+                helper hex_end
+                  ({
+                     seq_type = HexNoDigits;
+                     seq = "\\x";
                      start = i;
                      finish = i + 1;
                    }
+                  :: errors)
+              end
+              else if hex_len > 2 then begin
+                Buffer.add_char buf 'x';
+                helper hex_end
+                  ({
+                     seq_type = HexTooLarge;
+                     seq = "\\x";
+                     start = i;
+                     finish = hex_end - 1;
+                   }
+                  :: errors)
+              end
+              else begin
+                let seq = String.sub s hex_start hex_len in
+                let value = Scanf.sscanf seq "%x" Fun.id in
+                Buffer.add_char buf (char_of_int value);
+                helper hex_end errors
+              end
+          | c ->
+              Buffer.add_char buf c;
+              helper (i + 2)
+                ({
+                   seq_type = SeqNormal;
+                   seq = Printf.sprintf "\\%c" c;
+                   start = i;
+                   finish = i + 1;
+                 }
                 :: errors)
         end
       | c ->

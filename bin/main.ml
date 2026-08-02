@@ -2,12 +2,16 @@ open Ocaml_cc
 
 let print_string_error (source : Source.t) (e : Token_converter.string_error) :
     unit =
-  match e with
-  | InvalidEscape { seq_type; seq; span } -> (
-      match seq_type with
-      | SeqNormal ->
-          let msg = Printf.sprintf "unknown escape sequence '%s'" seq in
-          Diagnostics.emit_warning (Diagnostics.from_span source span msg))
+  let emit_fn, msg =
+    match e.seq_type with
+    | SeqNormal ->
+        ( Diagnostics.emit_warning,
+          Printf.sprintf "unknown escape sequence '%s'" e.seq )
+    | HexNoDigits ->
+        (Diagnostics.emit_error, "\\x used with no following hex digits")
+    | HexTooLarge -> (Diagnostics.emit_error, "hex escape sequence out of range")
+  in
+  emit_fn (Diagnostics.from_span source e.span msg)
 
 let print_conversion_error (source : Source.t)
     (e : Token_converter.conversion_error) : unit =
