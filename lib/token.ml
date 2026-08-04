@@ -123,8 +123,9 @@ type t = {
   is_at_line_start : bool;
 }
 
-let header_type_to_string (type_ : header_type) =
-  match type_ with Local -> "Local" | NonLocal -> "NonLocal"
+let pp_header_type (fmt : Format.formatter) (type_ : header_type) =
+  let str = match type_ with Local -> "Local" | NonLocal -> "NonLocal" in
+  Format.fprintf fmt "%s" str
 
 let display_source_positions (s : Source.string_pos list) : string =
   let rec helper (list : Source.string_pos list) (acc : string) : string =
@@ -138,135 +139,138 @@ let display_source_positions (s : Source.string_pos list) : string =
 
   helper s ""
 
-let kind_to_string = function
+let pp_kind_name (fmt : Format.formatter) (kind : kind) =
+  match kind with
   (* Preprocessor *)
-  | HeaderName { filepath; type_ } ->
-      Printf.sprintf "HeaderName { filepath: '%s', type: '%s'}" filepath
-        (header_type_to_string type_)
-  | PPChar value ->
-      Printf.sprintf "PPChar { value: '%s'; splices: [%s]}" value.string
-        (display_source_positions value.positions)
-  | PPNumber value -> Printf.sprintf "PPNumber {%s}" value
-  | PPString value ->
-      Printf.sprintf "PPString { value: '%s'; splices: [%s]}" value.string
-        (display_source_positions value.positions)
+  (* | HeaderName { filepath; type_ } -> *)
+  (*     Printf.sprintf "HeaderName { filepath: '%s', type: '%s'}" filepath *)
+  (*       (header_type_to_string type_) *)
+  (* | PPChar value -> *)
+  (*     Printf.sprintf "PPChar { value: '%s'; splices: [%s]}" value.string *)
+  (*       (display_source_positions value.positions) *)
+  (* | PPNumber value -> Printf.sprintf "PPNumber {%s}" value *)
+  (* | PPString value -> *)
+  (*     Printf.sprintf "PPString { value: '%s'; splices: [%s]}" value.string *)
+  (*       (display_source_positions value.positions) *)
+  | HeaderName { filepath; _ } -> Format.fprintf fmt "HeaderName(%S)" filepath
+  | PPChar { string; _ } -> Format.fprintf fmt "PPChar(%S)" string
+  | PPNumber value -> Format.fprintf fmt "PPNumber(%S)" value
+  | PPString { string } -> Format.fprintf fmt "PPString(%S)" string
   (* Keywords *)
-  | Auto -> "auto"
-  | Break -> "break"
-  | Case -> "case"
-  | Char -> "char"
-  | Const -> "const"
-  | Continue -> "continue"
-  | Default -> "default"
-  | Do -> "do"
-  | Double -> "double"
-  | Else -> "else"
-  | Enum -> "enum"
-  | Extern -> "extern"
-  | Float -> "float"
-  | For -> "for"
-  | Goto -> "goto"
-  | If -> "if"
-  | Inline -> "inline"
-  | Int -> "int"
-  | Long -> "long"
-  | Register -> "register"
-  | Restrict -> "restrict"
-  | Return -> "return"
-  | Short -> "short"
-  | Signed -> "signed"
-  | Sizeof -> "sizeof"
-  | Static -> "static"
-  | Struct -> "struct"
-  | Switch -> "switch"
-  | Typedef -> "typedef"
-  | Union -> "union"
-  | Unsigned -> "unsigned"
-  | Void -> "void"
-  | Volatile -> "volatile"
-  | While -> "while"
+  | Auto -> Format.fprintf fmt "Auto"
+  | Break -> Format.fprintf fmt "Break"
+  | Case -> Format.fprintf fmt "Case"
+  | Char -> Format.fprintf fmt "Char"
+  | Const -> Format.fprintf fmt "Const"
+  | Continue -> Format.fprintf fmt "Continue"
+  | Default -> Format.fprintf fmt "Default"
+  | Do -> Format.fprintf fmt "Do"
+  | Double -> Format.fprintf fmt "Double"
+  | Else -> Format.fprintf fmt "Else"
+  | Enum -> Format.fprintf fmt "Enum"
+  | Extern -> Format.fprintf fmt "Extern"
+  | Float -> Format.fprintf fmt "Float"
+  | For -> Format.fprintf fmt "For"
+  | Goto -> Format.fprintf fmt "Goto"
+  | If -> Format.fprintf fmt "If"
+  | Inline -> Format.fprintf fmt "Inline"
+  | Int -> Format.fprintf fmt "Int"
+  | Long -> Format.fprintf fmt "Long"
+  | Register -> Format.fprintf fmt "Register"
+  | Restrict -> Format.fprintf fmt "Restrict"
+  | Return -> Format.fprintf fmt "Return"
+  | Short -> Format.fprintf fmt "Short"
+  | Signed -> Format.fprintf fmt "Signed"
+  | Sizeof -> Format.fprintf fmt "Sizeof"
+  | Static -> Format.fprintf fmt "Static"
+  | Struct -> Format.fprintf fmt "Struct"
+  | Switch -> Format.fprintf fmt "Switch"
+  | Typedef -> Format.fprintf fmt "Typedef"
+  | Union -> Format.fprintf fmt "Union"
+  | Unsigned -> Format.fprintf fmt "Unsigned"
+  | Void -> Format.fprintf fmt "Void"
+  | Volatile -> Format.fprintf fmt "Volatile"
+  | While -> Format.fprintf fmt "While"
   (* _Keywords *)
-  | Bool -> "_Bool"
-  | Complex -> "_Complex"
-  | Imaginary -> "_Imaginary"
+  | Bool -> Format.fprintf fmt "_Bool"
+  | Complex -> Format.fprintf fmt "_Complex"
+  | Imaginary -> Format.fprintf fmt "_Imaginary"
   (* Identifiers and literals *)
-  | Identifier str -> Printf.sprintf "Identifier {%s}" str
-  | CharLiteral str -> Printf.sprintf "CharLiteral {%s}" str
-  | IntLiteral i -> "Int Literal"
-  | FloatLiteral f -> "Float Literal"
-  | StringLiteral str -> Printf.sprintf "StringLiteral {%s}" str
+  | Identifier str -> Format.fprintf fmt "Identifier(%S)" str
+  | CharLiteral str -> Format.fprintf fmt "CharLiteral(%S)" str
+  | IntLiteral i -> Format.fprintf fmt "IntLiteral(%a)" Z.pp_print i.value
+  | FloatLiteral f -> Format.fprintf fmt "FloatLiteral(%f)" f
+  | StringLiteral str -> Format.fprintf fmt "StringLiteral(%S)" str
   (* Operators *)
-  | Plus -> "Plus"
-  | PlusEqual -> "PlusEqual"
-  | PlusPlus -> "PlusPlus"
-  | Minus -> "Minus"
-  | MinusEqual -> "MinusEqual"
-  | MinusMinus -> "MinusMinus"
-  | Arrow -> "Arrow"
-  | Star -> "Star"
-  | StarEqual -> "StarEqual"
-  | Slash -> "Slash"
-  | SlashEqual -> "SlashEqual"
-  | Percent -> "Percent"
-  | PercentEqual -> "PercentEqual"
-  | Equal -> "Equal"
-  | EqualEqual -> "EqualEqual"
-  | Bang -> "Bang"
-  | BangEqual -> "BangEqual"
-  | Less -> "Less"
-  | LessEqual -> "LessEqual"
-  | LessLess -> "LessLess"
-  | LessLessEqual -> "LessLessEqual"
-  | Greater -> "Greater"
-  | GreaterEqual -> "GreaterEqual"
-  | GreaterGreater -> "GreaterGreater"
-  | GreaterGreaterEqual -> "GreaterGreaterEqual"
-  | And -> "And"
-  | AndEqual -> "AndEqual"
-  | AndAnd -> "AndAnd"
-  | Or -> "Or"
-  | OrEqual -> "OrEqual"
-  | OrOr -> "OrOr"
-  | Caret -> "Caret"
-  | CaretEqual -> "CaretEqual"
-  | Tilde -> "Tilde"
+  | Plus -> Format.fprintf fmt "Plus"
+  | PlusEqual -> Format.fprintf fmt "PlusEqual"
+  | PlusPlus -> Format.fprintf fmt "PlusPlus"
+  | Minus -> Format.fprintf fmt "Minus"
+  | MinusEqual -> Format.fprintf fmt "MinusEqual"
+  | MinusMinus -> Format.fprintf fmt "MinusMinus"
+  | Arrow -> Format.fprintf fmt "Arrow"
+  | Star -> Format.fprintf fmt "Star"
+  | StarEqual -> Format.fprintf fmt "StarEqual"
+  | Slash -> Format.fprintf fmt "Slash"
+  | SlashEqual -> Format.fprintf fmt "SlashEqual"
+  | Percent -> Format.fprintf fmt "Percent"
+  | PercentEqual -> Format.fprintf fmt "PercentEqual"
+  | Equal -> Format.fprintf fmt "Equal"
+  | EqualEqual -> Format.fprintf fmt "EqualEqual"
+  | Bang -> Format.fprintf fmt "Bang"
+  | BangEqual -> Format.fprintf fmt "BangEqual"
+  | Less -> Format.fprintf fmt "Less"
+  | LessEqual -> Format.fprintf fmt "LessEqual"
+  | LessLess -> Format.fprintf fmt "LessLess"
+  | LessLessEqual -> Format.fprintf fmt "LessLessEqual"
+  | Greater -> Format.fprintf fmt "Greater"
+  | GreaterEqual -> Format.fprintf fmt "GreaterEqual"
+  | GreaterGreater -> Format.fprintf fmt "GreaterGreater"
+  | GreaterGreaterEqual -> Format.fprintf fmt "GreaterGreaterEqual"
+  | And -> Format.fprintf fmt "And"
+  | AndEqual -> Format.fprintf fmt "AndEqual"
+  | AndAnd -> Format.fprintf fmt "AndAnd"
+  | Or -> Format.fprintf fmt "Or"
+  | OrEqual -> Format.fprintf fmt "OrEqual"
+  | OrOr -> Format.fprintf fmt "OrOr"
+  | Caret -> Format.fprintf fmt "Caret"
+  | CaretEqual -> Format.fprintf fmt "CaretEqual"
+  | Tilde -> Format.fprintf fmt "Tilde"
   (* Punctuation *)
-  | LeftParen -> "LeftParen"
-  | RightParen -> "RightParen"
-  | LeftBrace -> "LeftBrace"
-  | RightBrace -> "RightBrace"
-  | LeftBracket -> "LeftBracket"
-  | RightBracket -> "RightBracket"
-  | Colon -> "Colon"
-  | Comma -> "Comma"
-  | Ellipses -> "Ellipses"
-  | Hash -> "Hash"
-  | HashHash -> "HashHash"
-  | Semicolon -> "Semicolon"
-  | Period -> "Period"
-  | Question -> "Question"
-  | NewLine -> "NewLine"
-  | Eof -> "EOF"
-  | Invalid invalid -> (
-      match invalid with
-      | UnterminatedCharLiteral -> "Unterminated char literal"
-      | UnterminatedComment -> "Unterminated multi-line comment"
-      | UnterminatedHeaderName -> "Unterminated header name"
-      | UnterminatedStringLiteral -> "Unterminated string literal"
-      | InvalidChar c -> Printf.sprintf "Invalid character '%c'" c)
+  | LeftParen -> Format.fprintf fmt "LeftParen"
+  | RightParen -> Format.fprintf fmt "RightParen"
+  | LeftBrace -> Format.fprintf fmt "LeftBrace"
+  | RightBrace -> Format.fprintf fmt "RightBrace"
+  | LeftBracket -> Format.fprintf fmt "LeftBracket"
+  | RightBracket -> Format.fprintf fmt "RightBracket"
+  | Colon -> Format.fprintf fmt "Colon"
+  | Comma -> Format.fprintf fmt "Comma"
+  | Ellipses -> Format.fprintf fmt "Ellipses"
+  | Hash -> Format.fprintf fmt "Hash"
+  | HashHash -> Format.fprintf fmt "HashHash"
+  | Semicolon -> Format.fprintf fmt "Semicolon"
+  | Period -> Format.fprintf fmt "Period"
+  | Question -> Format.fprintf fmt "Question"
+  | NewLine -> Format.fprintf fmt "NewLine"
+  | Eof -> Format.fprintf fmt "Eof"
+  | Invalid invalid ->
+      begin match invalid with
+      | UnterminatedCharLiteral -> Format.fprintf fmt "UnterminatedCharLiteral"
+      | UnterminatedComment -> Format.fprintf fmt "UnterminatedMultiLineComment"
+      | UnterminatedHeaderName -> Format.fprintf fmt "UnterminatedHeaderName"
+      | UnterminatedStringLiteral ->
+          Format.fprintf fmt "UnterminatedStringLiteral"
+      | InvalidChar c ->
+          Format.fprintf fmt "InvalidCharacter(%S)" (String.make 1 c)
+      end
 
-let to_string (token : t) (source_manager : Source.manager) : string =
+let pp (source_manager : Source.manager) (fmt : Format.formatter) (token : t) :
+    unit =
   match token.kind with
   | NewLine
   | Invalid UnterminatedCharLiteral
   | Invalid UnterminatedComment
   | Invalid UnterminatedStringLiteral
   | Eof ->
-      Printf.sprintf "([%s]: %d:%d)"
-        (kind_to_string token.kind)
-        token.line token.col
-  | _ ->
-      Printf.sprintf "([%s]: [%s], %d:%d)"
-        (kind_to_string token.kind)
-        (Source.span_to_string token.span source_manager)
-        token.line token.col
+      Format.fprintf fmt "%a" pp_kind_name token.kind
+  | _ -> Format.fprintf fmt "%a" pp_kind_name token.kind

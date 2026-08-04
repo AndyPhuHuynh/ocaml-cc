@@ -12,5 +12,6 @@ d'; int what = 2;
     printf("%c\n", c1);
     printf("%c\n", c2);
     printf("%s\n", s);
+
     return 0;
 }

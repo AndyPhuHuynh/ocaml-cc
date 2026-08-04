@@ -1,1 +1,2 @@
 - Support Unicode characters for identifiers
+- Prefixes on char and string literals

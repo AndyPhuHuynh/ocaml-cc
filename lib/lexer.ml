@@ -523,19 +523,3 @@ let lex_header_name lexer =
           continue_lexing (advance_char lexer) (Buffer.create 16) Token.Local
       | _ -> lex_token lexer
     end
-
-let tokenize_all (source_id : Source.id) (source : Source.t) =
-  let rec helper (lexer : t) (acc : Token.t list) =
-    let tok, lexer =
-      match acc with
-      | { kind = Token.Identifier "include"; _ }
-        :: { kind = Token.Hash; _ }
-        :: _ ->
-          lex_header_name lexer
-      | _ -> lex_token lexer
-    in
-    match tok with
-    | { kind = Token.Eof } -> List.rev (tok :: acc)
-    | _ -> helper lexer (tok :: acc)
-  in
-  helper (create source_id source) []

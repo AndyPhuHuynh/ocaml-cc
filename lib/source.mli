@@ -19,9 +19,11 @@ val is_regular_file : string -> bool
 (**)
 val empty_manager : manager
 
+(* load source *)
+val load_string : manager -> name:string -> string -> manager * id * t
 val load_file : manager -> string -> (manager * id * t, load_error) result
-(** [load_file] accepts the [manager] and an *absolute* [filepath]. *)
 
+(**)
 val get_source : manager -> id -> t
 val get_line : t -> int -> string
 

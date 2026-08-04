@@ -151,8 +151,8 @@ let process_directive_include (pp : t) (include_location : location) : t =
             1
     end
   | _ -> begin
-      Printf.printf "Expect headername, got: %s"
-        (Token.to_string token pp.source_manager);
+      Format.printf "Expect header name, got: %a\n" Token.pp_kind_name
+        token.kind;
       exit 1
     end
 
@@ -197,6 +197,8 @@ let create (filepath : string) : (t, Source.load_error) result =
         };
     }
 
+let get_source_manager (pp : t) : Source.manager = pp.source_manager
+
 let rec next_token (pp : t) : Token.t * t =
   let token, lexer = lex_current pp in
   match token.kind with
@@ -213,14 +215,3 @@ let rec next_token (pp : t) : Token.t * t =
       in
       next_token pp
   | _ -> (token, update_lexer pp lexer)
-
-let tokenize_all (filepath : string) :
-    (Token.t list * Source.manager, Source.load_error) result =
-  let rec helper (pp : t) (acc : Token.t list) : Token.t list * Source.manager =
-    let tok, pp = next_token pp in
-    match tok.kind with
-    | Eof -> (List.rev (tok :: acc), pp.source_manager)
-    | _ -> helper pp (tok :: acc)
-  in
-  let* pp = create filepath in
-  Ok (helper pp [])

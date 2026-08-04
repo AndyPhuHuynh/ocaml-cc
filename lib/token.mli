@@ -123,6 +123,6 @@ type t = {
   is_at_line_start : bool;
 }
 
-val header_type_to_string : header_type -> string
-val kind_to_string : kind -> string
-val to_string : t -> Source.manager -> string
+val pp_header_type : Format.formatter -> header_type -> unit
+val pp_kind_name : Format.formatter -> kind -> unit
+val pp : Source.manager -> Format.formatter -> t -> unit

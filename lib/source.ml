@@ -65,6 +65,49 @@ let is_regular_file (filepath : string) : bool =
 let empty_manager =
   { next_id = 0; from_id = IntMap.empty; from_filepath = StringMap.empty }
 
+let add_source (manager : manager) (source : t) : manager * id * t =
+  let new_manager =
+    {
+      next_id = manager.next_id + 1;
+      from_id = IntMap.add manager.next_id source manager.from_id;
+      from_filepath =
+        StringMap.add source.filepath manager.next_id manager.from_filepath;
+    }
+  in
+  (new_manager, manager.next_id, source)
+
+let load_string (manager : manager) ~(name : string) (contents : string) :
+    manager * id * t =
+  match StringMap.find_opt name manager.from_filepath with
+  | Some id -> (manager, id, IntMap.find id manager.from_id)
+  | None ->
+      let source =
+        {
+          filepath = name;
+          contents;
+          line_offsets = calculate_line_offsets contents;
+        }
+      in
+      add_source manager source
+
+let load_file (manager : manager) (filepath : string) :
+    (manager * id * t, load_error) result =
+  let filepath = filepath |> make_absolute_path |> cannonize_if_exists in
+  match StringMap.find_opt filepath manager.from_filepath with
+  | Some id -> Ok (manager, id, IntMap.find id manager.from_id)
+  | None when not (is_regular_file filepath) -> Error FileNotFound
+  | None -> (
+      try
+        let contents = read_entire_file filepath in
+        let source =
+          { filepath; contents; line_offsets = calculate_line_offsets contents }
+        in
+        Ok (add_source manager source)
+      with Sys_error msg -> Error (IOError msg))
+
+let get_source (manager : manager) (id : id) : t =
+  IntMap.find id manager.from_id
+
 let get_line (source : t) (line : int) : string =
   let line_offset = source.line_offsets.(line - 1) in
   let line_len =
@@ -82,32 +125,6 @@ let get_line (source : t) (line : int) : string =
 
   let line_len = trim_new_line line_len in
   String.sub source.contents line_offset line_len
-
-let load_file (manager : manager) (filepath : string) :
-    (manager * id * t, load_error) result =
-  let filepath = filepath |> make_absolute_path |> cannonize_if_exists in
-  match StringMap.find_opt filepath manager.from_filepath with
-  | Some id -> Ok (manager, id, IntMap.find id manager.from_id)
-  | None when not (is_regular_file filepath) -> Error FileNotFound
-  | None -> (
-      try
-        let contents = read_entire_file filepath in
-        let source =
-          { filepath; contents; line_offsets = calculate_line_offsets contents }
-        in
-        Ok
-          ( {
-              next_id = manager.next_id + 1;
-              from_id = IntMap.add manager.next_id source manager.from_id;
-              from_filepath =
-                StringMap.add filepath manager.next_id manager.from_filepath;
-            },
-            manager.next_id,
-            source )
-      with Sys_error msg -> Error (IOError msg))
-
-let get_source (manager : manager) (id : id) : t =
-  IntMap.find id manager.from_id
 
 let get_line_from_pos (offsets : int array) (pos : int) : int =
   let rec loop (lo : int) (hi : int) : int =

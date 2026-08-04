@@ -1,7 +1,5 @@
 type t
 
 val create : string -> (t, Source.load_error) result
+val get_source_manager : t -> Source.manager
 val next_token : t -> Token.t * t
-
-val tokenize_all :
-  string -> (Token.t list * Source.manager, Source.load_error) result
