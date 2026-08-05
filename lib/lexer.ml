@@ -474,6 +474,7 @@ let lex_token lexer =
           | '/' -> lex_slash lexer
           | '%' -> lex_percent lexer
           | '=' -> lex_equal lexer
+          | '!' -> lex_bang lexer
           | '<' -> lex_less lexer
           | '>' -> lex_greater lexer
           | '&' -> lex_and lexer

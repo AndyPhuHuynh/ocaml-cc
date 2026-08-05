@@ -300,3 +300,9 @@ let pp (manager : Source.manager) (fmt : Format.formatter) (token : t) : unit =
   end;
 
   Format.fprintf fmt "@]"
+
+let pp_list (manager : Source.manager) (fmt : Format.formatter)
+    (tokens : t list) : unit =
+  Format.pp_print_list
+    ~pp_sep:(fun fmt () -> Format.fprintf fmt "@,@,")
+    (pp manager) fmt tokens

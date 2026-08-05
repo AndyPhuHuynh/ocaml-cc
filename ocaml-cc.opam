@@ -6,6 +6,7 @@ depends: [
   "ocaml"
   "dune" {>= "3.24"}
   "zarith"
+  "ppx_expect" {with-test}
   "odoc" {with-doc}
 ]
 build: [

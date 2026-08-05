@@ -11,6 +11,7 @@
  (depends 
    ocaml
    dune
-   zarith))
+   zarith
+   (ppx_expect :with-test)))
 
 ; See the complete stanza docs at https://dune.readthedocs.io/en/stable/reference/dune-project/index.html

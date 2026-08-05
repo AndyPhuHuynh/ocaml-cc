@@ -126,3 +126,4 @@ type t = {
 val pp_header_type : Format.formatter -> header_type -> unit
 val pp_kind_name : Format.formatter -> kind -> unit
 val pp : Source.manager -> Format.formatter -> t -> unit
+val pp_list : Source.manager -> Format.formatter -> t list -> unit
