@@ -30,9 +30,8 @@ let () =
     exit 1
   end;
 
-  match Source.load_file Source.empty_manager !input_file with
-  | Ok (manager, id, source) -> begin
-      let tokens = Inspect.lex_all id source in
+  match Inspect.lex_all (Source.LoadFile { filepath = !input_file }) with
+  | Ok (tokens, manager) -> begin
       List.iter
         (fun tok -> Format.printf "%a@.@." (Token.pp manager) tok)
         tokens

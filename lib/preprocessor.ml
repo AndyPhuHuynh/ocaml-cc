@@ -176,11 +176,9 @@ let process_directive (pp : t) (hash_location : location) : t =
   | NewLine -> update_lexer pp lexer
   | _ -> process_directive_invalid pp
 
-let create (filepath : string) : (t, Source.load_error) result =
+let create (load_type : Source.load_type) : (t, Source.load_error) result =
   let source_manager = Source.empty_manager in
-  let* new_manager, source_id, source =
-    Source.load_file source_manager filepath
-  in
+  let* new_manager, source_id, source = Source.load source_manager load_type in
   let lexer = Lexer.create source_id source in
 
   Ok

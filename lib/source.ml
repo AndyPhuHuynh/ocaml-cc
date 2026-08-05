@@ -14,6 +14,10 @@ type manager = {
   from_filepath : id StringMap.t;
 }
 
+type load_type =
+  | LoadString of { name : string; contents : string }
+  | LoadFile of { filepath : string }
+
 type load_error = FileNotFound | IOError of string
 
 let read_entire_file (name : string) : string =
@@ -105,6 +109,12 @@ let load_file (manager : manager) (filepath : string) :
         Ok (add_source manager source)
       with Sys_error msg -> Error (IOError msg))
 
+let load (manager : manager) (type_ : load_type) :
+    (manager * id * t, load_error) result =
+  match type_ with
+  | LoadString { name; contents } -> Ok (load_string manager ~name contents)
+  | LoadFile { filepath } -> load_file manager filepath
+
 let get_source (manager : manager) (id : id) : t =
   IntMap.find id manager.from_id
 
@@ -161,7 +171,7 @@ let string_index_to_source_pos (index : int) (positions : string_pos list) : int
   base_pos.pos + offset
 
 let pp_string_pos (fmt : Format.formatter) (value : string_pos) : unit =
-  Format.fprintf fmt "{ i: %4d; pos: %4d}" value.index value.pos
+  Format.fprintf fmt "{ i: %4d; pos: %4d }" value.index value.pos
 
 let pp_string_pos_list (fmt : Format.formatter) (values : string_pos list) :
     unit =
