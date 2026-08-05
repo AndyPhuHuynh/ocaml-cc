@@ -142,16 +142,6 @@ let display_source_positions (s : Source.string_pos list) : string =
 let pp_kind_name (fmt : Format.formatter) (kind : kind) =
   match kind with
   (* Preprocessor *)
-  (* | HeaderName { filepath; type_ } -> *)
-  (*     Printf.sprintf "HeaderName { filepath: '%s', type: '%s'}" filepath *)
-  (*       (header_type_to_string type_) *)
-  (* | PPChar value -> *)
-  (*     Printf.sprintf "PPChar { value: '%s'; splices: [%s]}" value.string *)
-  (*       (display_source_positions value.positions) *)
-  (* | PPNumber value -> Printf.sprintf "PPNumber {%s}" value *)
-  (* | PPString value -> *)
-  (*     Printf.sprintf "PPString { value: '%s'; splices: [%s]}" value.string *)
-  (*       (display_source_positions value.positions) *)
   | HeaderName { filepath; _ } -> Format.fprintf fmt "HeaderName(%S)" filepath
   | PPChar { string; _ } -> Format.fprintf fmt "PPChar(%S)" string
   | PPNumber value -> Format.fprintf fmt "PPNumber(%S)" value
@@ -264,13 +254,49 @@ let pp_kind_name (fmt : Format.formatter) (kind : kind) =
           Format.fprintf fmt "InvalidCharacter(%S)" (String.make 1 c)
       end
 
-let pp (source_manager : Source.manager) (fmt : Format.formatter) (token : t) :
-    unit =
-  match token.kind with
-  | NewLine
+let pp_kind_fields (fmt : Format.formatter) (kind : kind) =
+  match kind with
+  | HeaderName { filepath; type_ } ->
+      Format.fprintf fmt "filepath: %S" filepath;
+      Format.fprintf fmt "@,type: %a" pp_header_type type_
+  | PPChar value ->
+      Format.fprintf fmt "@[<v 2>";
+      Format.fprintf fmt "splices:";
+      Format.fprintf fmt "@,%a" Source.pp_string_pos_list value.positions;
+      Format.fprintf fmt "@]"
+  (* | PPNumber value -> Printf.sprintf "PPNumber {%s}" value *)
+  | PPString value ->
+      Format.fprintf fmt "@[<v 2>";
+      Format.fprintf fmt "splices:";
+      Format.fprintf fmt "@,%a" Source.pp_string_pos_list value.positions;
+      Format.fprintf fmt "@]"
+  | _ -> ()
+
+let has_fields (kind : kind) : bool =
+  match kind with
+  | HeaderName _ | PPChar _ | PPNumber _ | PPString _ -> true
+  | _ -> false
+
+let should_print_lexeme (kind : kind) : bool =
+  match kind with
   | Invalid UnterminatedCharLiteral
   | Invalid UnterminatedComment
-  | Invalid UnterminatedStringLiteral
-  | Eof ->
-      Format.fprintf fmt "%a" pp_kind_name token.kind
-  | _ -> Format.fprintf fmt "%a" pp_kind_name token.kind
+  | Invalid UnterminatedStringLiteral ->
+      false
+  | _ -> true
+
+let pp (manager : Source.manager) (fmt : Format.formatter) (token : t) : unit =
+  Format.fprintf fmt "@[<v 2>";
+
+  Format.fprintf fmt "%a" pp_kind_name token.kind;
+  Format.fprintf fmt "@,loc: %d:%d" token.line token.col;
+
+  if has_fields token.kind then begin
+    Format.fprintf fmt "@,%a" pp_kind_fields token.kind
+  end;
+
+  if should_print_lexeme token.kind then begin
+    Format.fprintf fmt "@,lexeme: %S" (Source.span_to_string token.span manager)
+  end;
+
+  Format.fprintf fmt "@]"

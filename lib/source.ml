@@ -159,3 +159,12 @@ let string_index_to_source_pos (index : int) (positions : string_pos list) : int
   let base_pos = find_base_pos positions in
   let offset = index - base_pos.index in
   base_pos.pos + offset
+
+let pp_string_pos (fmt : Format.formatter) (value : string_pos) : unit =
+  Format.fprintf fmt "{ i: %4d; pos: %4d}" value.index value.pos
+
+let pp_string_pos_list (fmt : Format.formatter) (values : string_pos list) :
+    unit =
+  Format.pp_print_list
+    ~pp_sep:(fun fmt () -> Format.fprintf fmt "@,")
+    pp_string_pos fmt values

@@ -30,20 +30,32 @@ let () =
     exit 1
   end;
 
-  match Inspect.pp_all !input_file with
-  | Ok (tokens, source_manager) -> begin
+  match Source.load_file Source.empty_manager !input_file with
+  | Ok (manager, id, source) -> begin
+      let tokens = Inspect.lex_all id source in
       List.iter
-        (fun (tok : Token.t) ->
-          let source = Source.get_source source_manager tok.span.source_id in
-          match Token_converter.convert_token tok source_manager with
-          | Success tok -> Format.printf "%a\n" (Token.pp source_manager) tok
-          | Recovered (tok, error) ->
-              Format.printf "%a\n" (Token.pp source_manager) tok;
-              print_conversion_error source error
-          | Unrecoverable error -> print_conversion_error source error)
+        (fun tok -> Format.printf "%a@.@." (Token.pp manager) tok)
         tokens
     end
   | Error FileNotFound ->
       Diagnostics.emit_driver_error
         (Printf.sprintf "file not found: %s" !input_file)
   | Error (IOError msg) -> Diagnostics.emit_driver_error msg
+
+(* match Inspect.pp_all !input_file with *)
+(* | Ok (tokens, source_manager) -> begin *)
+(*     List.iter *)
+(*       (fun (tok : Token.t) -> *)
+(*         let source = Source.get_source source_manager tok.span.source_id in *)
+(*         match Token_converter.convert_token tok source_manager with *)
+(*         | Success tok -> Format.printf "%a@.@." (Token.pp source_manager) tok *)
+(*         | Recovered (tok, error) -> *)
+(*             Format.printf "%a@.@." (Token.pp source_manager) tok; *)
+(*             print_conversion_error source error *)
+(*         | Unrecoverable error -> print_conversion_error source error) *)
+(*       tokens *)
+(*   end *)
+(* | Error FileNotFound -> *)
+(*     Diagnostics.emit_driver_error *)
+(*       (Printf.sprintf "file not found: %s" !input_file) *)
+(* | Error (IOError msg) -> Diagnostics.emit_driver_error msg *)

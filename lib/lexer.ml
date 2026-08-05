@@ -131,7 +131,12 @@ let rec last_elem = function
   | [ x ] -> x
   | x :: xs -> last_elem xs
 
-type char_view = { char : char; pos : int; splice_encountered : bool }
+type char_view = {
+  char : char;
+  pos : int;
+  position : position;
+  splice_encountered : bool;
+}
 
 let peek_char_view (lexer : t) : char_view option =
   let lexer, splice_encountered =
@@ -143,7 +148,14 @@ let peek_char_view (lexer : t) : char_view option =
   let c = at_index lexer in
   match c with
   | None -> None
-  | Some c -> Some { char = c; pos = lexer.position.pos; splice_encountered }
+  | Some c ->
+      Some
+        {
+          char = c;
+          pos = lexer.position.pos;
+          position = lexer.position;
+          splice_encountered;
+        }
 
 let peek_char (lexer : t) : char option =
   let lexer =
@@ -447,14 +459,13 @@ let lex_string_literal (lexer : t) : Token.t * t =
 
 let lex_token lexer =
   let lexer, tok = skip_whitespace lexer in
-  let lexer = { lexer with start = lexer.position } in
   match tok with
   | Some token -> (token, lexer)
   | None ->
-      begin match peek_char lexer with
+      begin match peek_char_view lexer with
       | None -> make_token Token.Eof lexer
-      | Some c ->
-          let lexer = advance_char lexer in
+      | Some { char = c; position; _ } ->
+          let lexer = advance_char { lexer with start = position } in
           begin match c with
           (* Operators *)
           | '+' -> lex_plus lexer

@@ -1,4 +1,4 @@
-let lex_all (source_id : Source.id) (source : Source.t) =
+let lex_all (source_id : Source.id) (source : Source.t) : Token.t list =
   let rec helper (lexer : Lexer.t) (acc : Token.t list) =
     let tok, lexer =
       match acc with

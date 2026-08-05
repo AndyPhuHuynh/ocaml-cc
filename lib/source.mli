@@ -33,3 +33,5 @@ val span_to_string : span -> manager -> string
 
 (* string *)
 val string_index_to_source_pos : int -> string_pos list -> int
+val pp_string_pos : Format.formatter -> string_pos -> unit
+val pp_string_pos_list : Format.formatter -> string_pos list -> unit

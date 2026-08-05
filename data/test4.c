@@ -1,4 +1,4 @@
-#include <stdio.h>
+#include <>
 
 int main() {
     const char *c = "\x41\
