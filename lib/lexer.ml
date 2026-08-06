@@ -420,13 +420,17 @@ let lex_char_literal (lexer : t) : Token.t * t =
     match peek_char_view lexer with
     | Some { char = '\''; _ } -> begin
         let lexer = advance_char lexer in
-        make_token
-          (Token.PPChar
-             {
-               string = Buffer.contents sb.buffer;
-               positions = List.rev sb.positions;
-             })
-          lexer
+        let kind =
+          if Buffer.length sb.buffer = 0 then
+            Token.Invalid Token.EmptyCharLiteral
+          else
+            Token.PPChar
+              {
+                string = Buffer.contents sb.buffer;
+                positions = List.rev sb.positions;
+              }
+        in
+        make_token kind lexer
       end
     | None | Some { char = '\n'; _ } -> begin
         let lexer = advance_char lexer in
@@ -437,7 +441,7 @@ let lex_char_literal (lexer : t) : Token.t * t =
         let next_lexer = advance_char lexer in
 
         match peek_char_view next_lexer with
-        | Some ({ char = '\''; _ } as c) ->
+        | Some c when c.char = '\\' || c.char = '\'' ->
             sb_add_char sb c;
             helper (advance_char next_lexer) sb
         | _ -> helper next_lexer sb

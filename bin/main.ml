@@ -33,7 +33,7 @@ let () =
   match Inspect.lex_all (Source.LoadFile { filepath = !input_file }) with
   | Ok (tokens, manager) -> begin
       List.iter
-        (fun tok -> Format.printf "%a@.@." (Token.pp manager) tok)
+        (fun tok -> Format.printf "%a@.@." (Token.pp_verbose manager) tok)
         tokens
     end
   | Error FileNotFound ->

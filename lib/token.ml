@@ -3,6 +3,7 @@ type header_name = { filepath : string; type_ : header_type }
 type int_literal = { value : Z.t; suffix : string option }
 
 type invalid =
+  | EmptyCharLiteral
   | UnterminatedCharLiteral
   | UnterminatedComment
   | UnterminatedHeaderName
@@ -245,6 +246,7 @@ let pp_kind_name (fmt : Format.formatter) (kind : kind) =
   | Eof -> Format.fprintf fmt "Eof"
   | Invalid invalid ->
       begin match invalid with
+      | EmptyCharLiteral -> Format.fprintf fmt "EmptyCharLiteral"
       | UnterminatedCharLiteral -> Format.fprintf fmt "UnterminatedCharLiteral"
       | UnterminatedComment -> Format.fprintf fmt "UnterminatedMultiLineComment"
       | UnterminatedHeaderName -> Format.fprintf fmt "UnterminatedHeaderName"
@@ -285,7 +287,17 @@ let should_print_lexeme (kind : kind) : bool =
       false
   | _ -> true
 
-let pp (manager : Source.manager) (fmt : Format.formatter) (token : t) : unit =
+let pp_compact (manager : Source.manager) (fmt : Format.formatter) (token : t) :
+    unit =
+  let kind_str = Format.asprintf "%a" pp_kind_name token.kind in
+  Format.fprintf fmt "%2d:%-3d %-22s" token.line token.col kind_str;
+
+  if should_print_lexeme token.kind then begin
+    Format.fprintf fmt "  lexeme=%S" (Source.span_to_string token.span manager)
+  end
+
+let pp_verbose (manager : Source.manager) (fmt : Format.formatter) (token : t) :
+    unit =
   Format.fprintf fmt "@[<v 2>";
 
   Format.fprintf fmt "%a" pp_kind_name token.kind;
@@ -301,8 +313,14 @@ let pp (manager : Source.manager) (fmt : Format.formatter) (token : t) : unit =
 
   Format.fprintf fmt "@]"
 
-let pp_list (manager : Source.manager) (fmt : Format.formatter)
+let pp_list_verbose (manager : Source.manager) (fmt : Format.formatter)
     (tokens : t list) : unit =
   Format.pp_print_list
     ~pp_sep:(fun fmt () -> Format.fprintf fmt "@,@,")
-    (pp manager) fmt tokens
+    (pp_verbose manager) fmt tokens
+
+let pp_list_compact (manager : Source.manager) (fmt : Format.formatter)
+    (tokens : t list) : unit =
+  Format.pp_print_list
+    ~pp_sep:(fun fmt () -> Format.fprintf fmt "@,")
+    (pp_compact manager) fmt tokens
