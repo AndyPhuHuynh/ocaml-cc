@@ -119,8 +119,7 @@ type kind =
 type t = {
   kind : kind;
   span : Source.span;
-  line : int;
-  col : int;
+  loc : Source.loc;
   is_at_line_start : bool;
 }
 
@@ -132,8 +131,10 @@ let display_source_positions (s : Source.string_pos list) : string =
   let rec helper (list : Source.string_pos list) (acc : string) : string =
     match list with
     | [] -> acc
-    | { index; pos } :: xs -> begin
-        let repr = Printf.sprintf "{ i: %d; pos: %d }" index pos in
+    | { index; loc } :: xs -> begin
+        let repr =
+          Printf.sprintf "{ i: %d; loc: %2d:%-3d }" index loc.line loc.col
+        in
         helper xs (acc ^ repr)
       end
   in
@@ -290,7 +291,7 @@ let should_print_lexeme (kind : kind) : bool =
 let pp_compact (manager : Source.manager) (fmt : Format.formatter) (token : t) :
     unit =
   let kind_str = Format.asprintf "%a" pp_kind_name token.kind in
-  Format.fprintf fmt "%2d:%-3d %-22s" token.line token.col kind_str;
+  Format.fprintf fmt "%2d:%-3d %-22s" token.loc.line token.loc.col kind_str;
 
   if should_print_lexeme token.kind then begin
     Format.fprintf fmt "  lexeme=%S" (Source.span_to_string token.span manager)
@@ -301,7 +302,7 @@ let pp_verbose (manager : Source.manager) (fmt : Format.formatter) (token : t) :
   Format.fprintf fmt "@[<v 2>";
 
   Format.fprintf fmt "%a" pp_kind_name token.kind;
-  Format.fprintf fmt "@,loc: %d:%d" token.line token.col;
+  Format.fprintf fmt "@,loc: %d:%d" token.loc.line token.loc.col;
 
   if has_fields token.kind then begin
     Format.fprintf fmt "@,%a" pp_kind_fields token.kind

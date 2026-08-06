@@ -1,10 +1,8 @@
-type position = { pos : int; line : int; col : int }
-
 type t = {
   source_id : Source.id;
   source : Source.t;
-  position : position;
-  start : position;
+  position : Source.pos;
+  start : Source.pos;
   next_token_starts_line : bool;
 }
 
@@ -19,36 +17,34 @@ let is_digit (c : char) : bool = match c with '0' .. '9' -> true | _ -> false
 let is_exponent_prefix (c : char) : bool =
   match c with 'e' | 'E' | 'p' | 'P' -> true | _ -> false
 
-let default_pos : position = { pos = 0; line = 1; col = 1 }
-
 let create (source_id : Source.id) (source : Source.t) : t =
   {
     source_id;
     source;
-    position = default_pos;
-    start = default_pos;
+    position = Source.default_pos;
+    start = Source.default_pos;
     next_token_starts_line = true;
   }
 
 let get_span (lexer : t) : Source.span =
   {
     source_id = lexer.source_id;
-    start = lexer.start.pos;
-    length = lexer.position.pos - lexer.start.pos;
+    start = lexer.start.index;
+    length = lexer.position.index - lexer.start.index;
   }
 
 let make_string_from_start_pos (lexer : t) (start : int) =
-  String.sub lexer.source.contents start (lexer.position.pos - start)
+  String.sub lexer.source.contents start (lexer.position.index - start)
 
 let make_string_from_current_bounds (lexer : t) : string =
-  make_string_from_start_pos lexer lexer.start.pos
+  make_string_from_start_pos lexer lexer.start.index
 
 let is_at_end (lexer : t) : bool =
-  lexer.position.pos >= String.length lexer.source.contents
+  lexer.position.index >= String.length lexer.source.contents
 
 let at_index (lexer : t) : char option =
   if is_at_end lexer then None
-  else Some lexer.source.contents.[lexer.position.pos]
+  else Some lexer.source.contents.[lexer.position.index]
 
 let advance_index (lexer : t) : t =
   match at_index lexer with
@@ -58,9 +54,8 @@ let advance_index (lexer : t) : t =
         lexer with
         position =
           {
-            pos = lexer.position.pos + 1;
-            line = lexer.position.line + 1;
-            col = 1;
+            index = lexer.position.index + 1;
+            loc = { line = lexer.position.loc.line + 1; col = 1 };
           };
       }
   | _ ->
@@ -68,13 +63,16 @@ let advance_index (lexer : t) : t =
         lexer with
         position =
           {
-            pos = lexer.position.pos + 1;
-            line = lexer.position.line;
-            col = lexer.position.col + 1;
+            index = lexer.position.index + 1;
+            loc =
+              {
+                line = lexer.position.loc.line;
+                col = lexer.position.loc.col + 1;
+              };
           };
       }
 
-type splice = { lexer : t; whitespace_separated : bool; line : int; col : int }
+type splice = { lexer : t; whitespace_separated : bool; loc : Source.loc }
 type splice_result = NoSplice | Splice of splice
 
 (** [find_line_splice] will check for backslash followed by any amount of
@@ -88,8 +86,7 @@ let find_line_splice (lexer : t) : splice_result =
           {
             lexer = advanced;
             whitespace_separated = true;
-            line = original.position.line;
-            col = original.position.col;
+            loc = original.position.loc;
           }
       end
     | Some c when is_whitespace c -> helper original (advance_index advanced)
@@ -105,8 +102,7 @@ let find_line_splice (lexer : t) : splice_result =
             {
               lexer = advance_index next_lexer;
               whitespace_separated = false;
-              line = lexer.position.line;
-              col = lexer.position.col;
+              loc = lexer.position.loc;
             }
       | Some c when is_whitespace c -> helper lexer (advance_index next_lexer)
       | _ -> NoSplice)
@@ -122,8 +118,7 @@ let find_line_splice_sequence (lexer : t) : splice list =
 
 let emit_splice_diagnostic (splice : splice) : unit =
   Diagnostics.emit_warning
-    (Diagnostics.at splice.lexer.source
-       (Source.make_loc splice.line splice.col)
+    (Diagnostics.at splice.lexer.source splice.loc
        "backslash and newline separated by whitespace")
 
 let rec last_elem = function
@@ -131,12 +126,7 @@ let rec last_elem = function
   | [ x ] -> x
   | x :: xs -> last_elem xs
 
-type char_view = {
-  char : char;
-  pos : int;
-  position : position;
-  splice_encountered : bool;
-}
+type char_view = { char : char; pos : Source.pos; splice_encountered : bool }
 
 let peek_char_view (lexer : t) : char_view option =
   let lexer, splice_encountered =
@@ -148,14 +138,7 @@ let peek_char_view (lexer : t) : char_view option =
   let c = at_index lexer in
   match c with
   | None -> None
-  | Some c ->
-      Some
-        {
-          char = c;
-          pos = lexer.position.pos;
-          position = lexer.position;
-          splice_encountered;
-        }
+  | Some c -> Some { char = c; pos = lexer.position; splice_encountered }
 
 let peek_char (lexer : t) : char option =
   let lexer =
@@ -202,24 +185,18 @@ let sb_add_char (sb : string_builder) (char_view : char_view) : unit =
   match sb.positions with
   | [] ->
       sb.positions <-
-        [ { index = Buffer.length sb.buffer - 1; pos = char_view.pos } ]
+        [ { index = Buffer.length sb.buffer - 1; loc = char_view.pos.loc } ]
   | _ ->
       if char_view.splice_encountered then begin
         let index = Buffer.length sb.buffer - 1 in
-        sb.positions <- { index; pos = char_view.pos } :: sb.positions
+        sb.positions <- { index; loc = char_view.pos.loc } :: sb.positions
       end
 
 let make_token (kind : Token.kind) (lexer : t) : Token.t * t =
   let is_at_line_start = lexer.next_token_starts_line in
   let lexer = { lexer with next_token_starts_line = kind = Token.NewLine } in
   let token : Token.t =
-    {
-      kind;
-      span = get_span lexer;
-      line = lexer.start.line;
-      col = lexer.start.col;
-      is_at_line_start;
-    }
+    { kind; span = get_span lexer; loc = lexer.start.loc; is_at_line_start }
   in
   (token, lexer)
 
@@ -493,8 +470,8 @@ let lex_token lexer =
   | None ->
       begin match peek_char_view lexer with
       | None -> make_token Token.Eof lexer
-      | Some { char = c; position; _ } ->
-          let lexer = advance_char { lexer with start = position } in
+      | Some { char = c; pos; _ } ->
+          let lexer = advance_char { lexer with start = pos } in
           begin match c with
           (* Operators *)
           | '+' -> lex_plus lexer

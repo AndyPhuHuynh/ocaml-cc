@@ -126,10 +126,10 @@ d'
     PPChar("abcd")
       loc: 2:1
       splices:
-        { i:    0; pos:    2 }
-        { i:    1; pos:    6 }
-        { i:    2; pos:   10 }
-        { i:    3; pos:   14 }
+        { i:    0; loc:   2:2   }
+        { i:    1; loc:   3:1   }
+        { i:    2; loc:   4:1   }
+        { i:    3; loc:   5:1   }
       lexeme: "'a\\ \nb\\ \nc\\ \nd'"
 
     NewLine

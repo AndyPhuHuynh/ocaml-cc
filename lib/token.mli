@@ -119,8 +119,7 @@ type kind =
 type t = {
   kind : kind;
   span : Source.span;
-  line : int;
-  col : int;
+  loc : Source.loc;
   is_at_line_start : bool;
 }
 

@@ -1,11 +1,10 @@
 type defines = string list
-type location = { line : int; col : int }
 
 type source = {
   id : Source.id;
   source : Source.t;
   lexer : Lexer.t;
-  child_include_location : location option;
+  child_include_location : Source.loc option;
 }
 
 type source_stack = { current : source; rest : source list; size : int }
@@ -25,9 +24,9 @@ let print_include_stack (pp : t) : unit =
   let stack = List.rev pp.source_stack.rest in
   List.iter
     (fun source ->
-      let { line; col } = Option.get source.child_include_location in
+      let loc = Option.get source.child_include_location in
       Printf.eprintf "In file included from %s:%d:%d\n" source.source.filepath
-        line col)
+        loc.line loc.col)
     stack
 
 let emit_error (pp : t) (diag : Diagnostics.t) : t =
@@ -61,7 +60,7 @@ let update_lexer (pp : t) (lexer : Lexer.t) : t =
   let source_stack = { pp.source_stack with current } in
   { pp with source_stack }
 
-let append_source (pp : t) (filepath : string) (include_location : location) :
+let append_source (pp : t) (filepath : string) (include_location : Source.loc) :
     (t, Source.load_error) result =
   let* source_manager, id, source =
     Source.load_file pp.source_manager filepath
@@ -108,16 +107,14 @@ let rec skip_line (pp : t) =
   | Eof | NewLine -> update_lexer pp lexer
   | _ -> skip_line (update_lexer pp lexer)
 
-let process_directive_include (pp : t) (include_location : location) : t =
+let process_directive_include (pp : t) (include_location : Source.loc) : t =
   let token, lexer = lex_current_header_name pp in
   let pp = update_lexer pp lexer in
   match token.kind with
   | HeaderName { filepath = ""; _ } ->
       let pp =
         emit_error pp
-          (Diagnostics.at (get_current_source pp)
-             (Source.make_loc token.line token.col)
-             "empty filename")
+          (Diagnostics.at (get_current_source pp) token.loc "empty filename")
       in
       skip_line pp
   | HeaderName { filepath; _ } -> begin
@@ -127,8 +124,7 @@ let process_directive_include (pp : t) (include_location : location) : t =
 
       if pp.source_stack.size >= 256 then begin
         Diagnostics.emit_fatal_error
-          (Diagnostics.at (get_current_source pp)
-             (Source.make_loc token.line token.col)
+          (Diagnostics.at (get_current_source pp) token.loc
              "maximum include depth exceeded")
           1
       end;
@@ -138,16 +134,13 @@ let process_directive_include (pp : t) (include_location : location) : t =
       | Error FileNotFound ->
           let source = get_current_source pp in
           Diagnostics.emit_fatal_error
-            (Diagnostics.range source
-               (Source.make_loc token.line token.col)
+            (Diagnostics.range source token.loc
                (Source.get_span_end source token.span)
                (Printf.sprintf "'%s' file not found" filepath))
             1
       | Error (IOError msg) ->
           Diagnostics.emit_fatal_error
-            (Diagnostics.at (get_current_source pp)
-               (Source.make_loc token.line token.col)
-               msg)
+            (Diagnostics.at (get_current_source pp) token.loc msg)
             1
     end
   | _ -> begin
@@ -163,12 +156,10 @@ let rec process_directive_invalid (pp : t) : t =
       (Source.span_to_string invalid.span pp.source_manager)
   in
   Diagnostics.emit_error
-    (Diagnostics.at (get_current_source pp)
-       (Source.make_loc invalid.line invalid.col)
-       msg);
+    (Diagnostics.at (get_current_source pp) invalid.loc msg);
   skip_line pp
 
-let process_directive (pp : t) (hash_location : location) : t =
+let process_directive (pp : t) (hash_location : Source.loc) : t =
   let directive, lexer = lex_current pp in
   match directive.kind with
   | Identifier "include" ->
@@ -207,9 +198,6 @@ let rec next_token (pp : t) : Token.t * t =
       end
   | NewLine -> next_token (update_lexer pp lexer)
   | Hash when token.is_at_line_start ->
-      let pp =
-        process_directive (update_lexer pp lexer)
-          { line = token.line; col = token.col }
-      in
+      let pp = process_directive (update_lexer pp lexer) token.loc in
       next_token pp
   | _ -> (token, update_lexer pp lexer)

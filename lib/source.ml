@@ -1,8 +1,9 @@
 type t = { filepath : string; contents : string; line_offsets : int array }
 type id = int
 type loc = { line : int; col : int }
+type pos = { index : int; loc : loc }
 type span = { source_id : id; start : int; length : int }
-type string_pos = { index : int; pos : int }
+type string_pos = { index : int; loc : loc }
 type string_src = { string : string; positions : string_pos list }
 
 module IntMap = Map.Make (Int)
@@ -55,6 +56,8 @@ let get_loc_from_pos (source : t) (pos : int) : loc =
   let line = index + 1 in
   let col = pos - source.line_offsets.(index) + 1 in
   { line; col }
+
+let default_pos : pos = { index = 0; loc = { line = 1; col = 1 } }
 
 let make_absolute_path (path : string) =
   if Filename.is_relative path then Filename.concat (Sys.getcwd ()) path
@@ -168,10 +171,11 @@ let string_index_to_source_pos (index : int) (positions : string_pos list) : int
 
   let base_pos = find_base_pos positions in
   let offset = index - base_pos.index in
-  base_pos.pos + offset
+  base_pos.index + offset
 
 let pp_string_pos (fmt : Format.formatter) (value : string_pos) : unit =
-  Format.fprintf fmt "{ i: %4d; pos: %4d }" value.index value.pos
+  Format.fprintf fmt "{ i: %4d; loc: %3d:%-3d }" value.index value.loc.line
+    value.loc.col
 
 let pp_string_pos_list (fmt : Format.formatter) (values : string_pos list) :
     unit =
