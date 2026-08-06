@@ -264,6 +264,17 @@ and skip_whitespace (lexer : t) : t * Token.t option =
     end
   | _ -> (lexer, None)
 
+let lex_sequence (lexer : t) (seq : string) : t option =
+  let len = String.length seq in
+  let rec helper (lexer : t) (i : int) : t option =
+    if i >= len then Some lexer
+    else
+      match peek_char lexer with
+      | Some c when c = seq.[i] -> helper (advance_char lexer) (i + 1)
+      | _ -> None
+  in
+  helper lexer 0
+
 let lex_plus (lexer : t) : Token.t * t =
   match peek_char lexer with
   | Some '+' -> make_token Token.PlusPlus (advance_char lexer)
@@ -289,7 +300,14 @@ let lex_slash (lexer : t) : Token.t * t =
 
 let lex_percent (lexer : t) : Token.t * t =
   match peek_char lexer with
+  | Some '>' -> make_token Token.RightBrace (advance_char lexer)
   | Some '=' -> make_token Token.PercentEqual (advance_char lexer)
+  | Some ':' -> begin
+      let lexer1 = advance_char lexer in
+      match lex_sequence lexer1 "%:" with
+      | Some lexer2 -> make_token Token.HashHash lexer2
+      | _ -> make_token Token.Hash lexer1
+    end
   | _ -> make_token Token.Percent lexer
 
 let lex_equal (lexer : t) : Token.t * t =
@@ -304,6 +322,8 @@ let lex_bang (lexer : t) : Token.t * t =
 
 let lex_less (lexer : t) : Token.t * t =
   match peek_char lexer with
+  | Some ':' -> make_token Token.LeftBracket (advance_char lexer)
+  | Some '%' -> make_token Token.LeftBrace (advance_char lexer)
   | Some '=' -> make_token Token.LessEqual (advance_char lexer)
   | Some '<' -> begin
       let lexer = advance_char lexer in
@@ -375,6 +395,11 @@ let lex_period (lexer : t) : Token.t * t =
     end
   | Some '0' .. '9' -> lex_pp_number lexer '.'
   | _ -> make_token Token.Period lexer
+
+let lex_colon (lexer : t) : Token.t * t =
+  match peek_char lexer with
+  | Some '>' -> make_token Token.RightBracket (advance_char lexer)
+  | _ -> make_token Token.Colon lexer
 
 let lex_hash (lexer : t) : Token.t * t =
   match peek_char lexer with
@@ -488,10 +513,10 @@ let lex_token lexer =
           | '}' -> make_token Token.RightBrace lexer
           | '[' -> make_token Token.LeftBracket lexer
           | ']' -> make_token Token.RightBracket lexer
-          | ':' -> make_token Token.Colon lexer
           | ',' -> make_token Token.Comma lexer
           | ';' -> make_token Token.Semicolon lexer
           | '?' -> make_token Token.Question lexer
+          | ':' -> lex_colon lexer
           | '#' -> lex_hash lexer
           | '.' -> lex_period lexer
           (* Literals *)
