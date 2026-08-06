@@ -6,5 +6,5 @@ let test_lexer ?(verbose : bool = false) (contents : string) : unit =
       let formatter =
         if verbose then Token.pp_list_verbose else Token.pp_list_compact
       in
-      Format.printf "@[<v>%a@]" (formatter manager) tokens
+      Format.printf "@[<v>%a@]@.@." (formatter manager) tokens
   | Error _ -> ()

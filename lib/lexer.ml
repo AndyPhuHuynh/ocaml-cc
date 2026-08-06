@@ -475,7 +475,7 @@ let lex_string_literal (lexer : t) : Token.t * t =
         let next_lexer = advance_char lexer in
 
         match peek_char_view next_lexer with
-        | Some ({ char = '"'; _ } as c) ->
+        | Some c when c.char = '\\' || c.char = '"' ->
             sb_add_char sb c;
             helper (advance_char next_lexer) sb
         | _ -> helper next_lexer sb
