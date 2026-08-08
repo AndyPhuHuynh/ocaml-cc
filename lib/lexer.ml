@@ -383,14 +383,18 @@ let lex_hash (lexer : t) : Token.t * t =
   | Some '#' -> make_token Token.HashHash (advance_char lexer)
   | _ -> make_token Token.Hash lexer
 
-let rec lex_identifier (lexer : t) : Token.t * t =
-  match peek_char lexer with
-  | Some ('_' | 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9') ->
-      lex_identifier (advance_char lexer)
-  | _ ->
-      make_token
-        (Token.Identifier (make_string_from_current_bounds lexer))
-        lexer
+let lex_identifier (lexer : t) (start_char : char) : Token.t * t =
+  let rec helper (lexer : t) (buf : Buffer.t) : Token.t * t =
+    match peek_char lexer with
+    | Some (('_' | 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9') as c) ->
+        Buffer.add_char buf c;
+        helper (advance_char lexer) buf
+    | _ -> make_token (Token.Identifier (Buffer.contents buf)) lexer
+  in
+
+  let buf = Buffer.create 16 in
+  Buffer.add_char buf start_char;
+  helper lexer buf
 
 let lex_char_literal (lexer : t) : Token.t * t =
   let rec helper (lexer : t) (sb : string_builder) : Token.t * t =
@@ -501,7 +505,7 @@ let lex_token lexer =
           | '#' -> lex_hash lexer
           | '.' -> lex_period lexer
           (* Literals *)
-          | '_' | 'a' .. 'z' | 'A' .. 'Z' -> lex_identifier lexer
+          | '_' | 'a' .. 'z' | 'A' .. 'Z' -> lex_identifier lexer c
           | '0' .. '9' -> lex_pp_number lexer c
           | '\'' -> lex_char_literal lexer
           | '"' -> lex_string_literal lexer
