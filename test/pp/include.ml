@@ -1,5 +1,5 @@
 let%expect_test "include" =
-  Helpers.test_pp
+  Test.test_pp
     ~initial_src:
       {
         name = "main.c";
@@ -50,7 +50,7 @@ int baz();
     |}]
 
 let%expect_test "header not found" =
-  Helpers.test_pp
+  Test.test_pp
     ~initial_src:{ name = "main.c"; contents = "#include <not_real.h>" }
     [];
   [%expect

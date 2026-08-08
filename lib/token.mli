@@ -1,6 +1,7 @@
 type header_type = Local | NonLocal
 type header_name = { filepath : string; type_ : header_type }
-type int_literal = { value : Z.t; suffix : string option }
+type int_suffix = U | L | UL | LL | ULL
+type int_literal = { value : Z.t; suffix : int_suffix option }
 
 type invalid =
   | EmptyCharLiteral
@@ -14,7 +15,7 @@ type kind =
   (* Preprocessing *)
   | HeaderName of header_name
   | PPChar of Source.string_src
-  | PPNumber of string
+  | PPNumber of Source.string_src
   | PPString of Source.string_src
   (* Keywords *)
   | Auto

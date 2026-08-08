@@ -1,9 +1,10 @@
 let%expect_test "after include" =
-  Helpers.test_lexer ~verbose:true {|
+  Test.test_lexer ~verbose:true {|
 #include <stdio.h>
 #include "stdlib.h"
 |};
-  [%expect {|
+  [%expect
+    {|
     NewLine
       loc: 1:1
       lexeme: "\n"
@@ -50,11 +51,12 @@ let%expect_test "after include" =
     |}]
 
 let%expect_test "not after include" =
-  Helpers.test_lexer {|
+  Test.test_lexer {|
 <stdio.h>
 "stdlib.h"
 |};
-  [%expect {|
+  [%expect
+    {|
     1:1   NewLine                 lexeme="\n"
     2:1   Less                    lexeme="<"
     2:2   Identifier("stdio")     lexeme="stdio"

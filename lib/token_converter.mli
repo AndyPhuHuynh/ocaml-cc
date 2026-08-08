@@ -6,11 +6,18 @@ type string_error = {
   span : Source.span;
 }
 
-type conversion_error = StringError of string_error list
+type pp_number_error = InvalidSuffix of { span : Source.span }
+
+type conversion_error =
+  | StringError of string_error list
+  | PPNumberError of pp_number_error
 
 type conversion_result =
   | Success of Token.t
   | Recovered of Token.t * conversion_error
   | Unrecoverable of conversion_error
 
+val print_string_error : Source.t -> string_error -> unit
+val print_pp_number_error : Source.t -> pp_number_error -> unit
+val print_conversion_error : Source.t -> conversion_error -> unit
 val convert_token : Token.t -> Source.manager -> conversion_result

@@ -192,6 +192,9 @@ let sb_add_char (sb : string_builder) (char_view : char_view) : unit =
         sb.positions <- { index; loc = char_view.pos.loc } :: sb.positions
       end
 
+let sb_to_string_src (sb : string_builder) : Source.string_src =
+  { string = Buffer.contents sb.buffer; positions = List.rev sb.positions }
+
 let make_token (kind : Token.kind) (lexer : t) : Token.t * t =
   let is_at_line_start = lexer.next_token_starts_line in
   let lexer = { lexer with next_token_starts_line = kind = Token.NewLine } in
@@ -340,29 +343,31 @@ let lex_caret (lexer : t) : Token.t * t =
 
 let lex_tilde (lexer : t) : Token.t * t = make_token Token.Tilde lexer
 
-let lex_pp_number (lexer : t) (start_char : char) : Token.t * t =
-  let rec helper (lexer : t) (buf : Buffer.t) : Token.t * t =
-    match peek_char lexer with
-    | Some c when is_exponent_prefix c -> begin
-        Buffer.add_char buf c;
+let lex_pp_number (lexer : t) (start_char : char_view) : Token.t * t =
+  let rec helper (lexer : t) (sb : string_builder) : Token.t * t =
+    match peek_char_view lexer with
+    | Some c when is_exponent_prefix c.char -> begin
+        sb_add_char sb c;
         let after_prefix = advance_char lexer in
-        match peek_char after_prefix with
-        | Some sign when sign = '+' || sign = '-' ->
-            Buffer.add_char buf sign;
-            helper (advance_char after_prefix) buf
-        | _ -> helper after_prefix buf
+
+        match peek_char_view after_prefix with
+        | Some sign when sign.char = '+' || sign.char = '-' ->
+            sb_add_char sb sign;
+            helper (advance_char after_prefix) sb
+        | _ -> helper after_prefix sb
       end
-    | Some c when is_identifier_non_digit c || is_digit c || c == '.' ->
-        Buffer.add_char buf c;
-        helper (advance_char lexer) buf
-    | _ -> make_token (Token.PPNumber (Buffer.contents buf)) lexer
+    | Some c
+      when is_identifier_non_digit c.char || is_digit c.char || c.char == '.' ->
+        sb_add_char sb c;
+        helper (advance_char lexer) sb
+    | _ -> make_token (Token.PPNumber (sb_to_string_src sb)) lexer
   in
 
-  let buf = Buffer.create 16 in
-  Buffer.add_char buf start_char;
-  helper lexer buf
+  let sb = sb_create 16 in
+  sb_add_char sb start_char;
+  helper lexer sb
 
-let lex_period (lexer : t) : Token.t * t =
+let lex_period (lexer : t) (start_char : char_view) : Token.t * t =
   match peek_char lexer with
   | Some '.' -> begin
       let next_lexer = advance_char lexer in
@@ -370,7 +375,7 @@ let lex_period (lexer : t) : Token.t * t =
       | Some '.' -> make_token Token.Ellipses (advance_char next_lexer)
       | _ -> make_token Token.Period lexer
     end
-  | Some '0' .. '9' -> lex_pp_number lexer '.'
+  | Some '0' .. '9' -> lex_pp_number lexer start_char
   | _ -> make_token Token.Period lexer
 
 let lex_colon (lexer : t) : Token.t * t =
@@ -404,12 +409,7 @@ let lex_char_literal (lexer : t) : Token.t * t =
         let kind =
           if Buffer.length sb.buffer = 0 then
             Token.Invalid Token.EmptyCharLiteral
-          else
-            Token.PPChar
-              {
-                string = Buffer.contents sb.buffer;
-                positions = List.rev sb.positions;
-              }
+          else Token.PPChar (sb_to_string_src sb)
         in
         make_token kind lexer
       end
@@ -443,13 +443,7 @@ let lex_string_literal (lexer : t) : Token.t * t =
       end
     | Some { char = '"'; _ } -> begin
         let lexer = advance_char lexer in
-        let spliced_str : Source.string_src =
-          {
-            string = Buffer.contents sb.buffer;
-            positions = List.rev sb.positions;
-          }
-        in
-        make_token (Token.PPString spliced_str) lexer
+        make_token (Token.PPString (sb_to_string_src sb)) lexer
       end
     | Some ({ char = '\\'; _ } as c) -> begin
         sb_add_char sb c;
@@ -474,7 +468,7 @@ let lex_token lexer =
   | None ->
       begin match peek_char_view lexer with
       | None -> make_token Token.Eof lexer
-      | Some { char = c; pos; _ } ->
+      | Some ({ char = c; pos; _ } as start_char_view) ->
           let lexer = advance_char { lexer with start = pos } in
           begin match c with
           (* Operators *)
@@ -503,10 +497,10 @@ let lex_token lexer =
           | '?' -> make_token Token.Question lexer
           | ':' -> lex_colon lexer
           | '#' -> lex_hash lexer
-          | '.' -> lex_period lexer
+          | '.' -> lex_period lexer start_char_view
           (* Literals *)
           | '_' | 'a' .. 'z' | 'A' .. 'Z' -> lex_identifier lexer c
-          | '0' .. '9' -> lex_pp_number lexer c
+          | '0' .. '9' -> lex_pp_number lexer start_char_view
           | '\'' -> lex_char_literal lexer
           | '"' -> lex_string_literal lexer
           | _ -> make_token (Token.Invalid (Token.InvalidChar c)) lexer

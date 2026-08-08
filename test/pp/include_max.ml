@@ -1,5 +1,5 @@
 let%expect_test "too many includes" =
-  Helpers.test_pp
+  Test.test_pp
     ~initial_src:{ name = "one.c"; contents = "#include <two.c>" }
     [ { name = "two.c"; contents = "#include <one.c>" } ];
   [%expect

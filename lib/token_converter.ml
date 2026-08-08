@@ -1,10 +1,10 @@
 type invalid_escape_type = SeqNormal | HexNoDigits | HexTooLarge
+type index_span = { start : int; finish : int }
 
 type string_error_proto = {
   seq_type : invalid_escape_type;
   seq : string;
-  start : int;
-  finish : int;
+  indices : index_span;
 }
 
 type string_error = {
@@ -13,17 +13,46 @@ type string_error = {
   span : Source.span;
 }
 
-type conversion_error = StringError of string_error list
+type pp_number_error_proto = InvalidSuffix of index_span
+type pp_number_error = InvalidSuffix of { span : Source.span }
+
+type conversion_error =
+  | StringError of string_error list
+  | PPNumberError of pp_number_error
 
 type conversion_result =
   | Success of Token.t
   | Recovered of Token.t * conversion_error
   | Unrecoverable of conversion_error
 
+let print_string_error (source : Source.t) (e : string_error) : unit =
+  let emit_fn, msg =
+    match e.seq_type with
+    | SeqNormal ->
+        ( Diagnostics.emit_warning,
+          Printf.sprintf "unknown escape sequence '%s'" e.seq )
+    | HexNoDigits ->
+        (Diagnostics.emit_error, "\\x used with no following hex digits")
+    | HexTooLarge -> (Diagnostics.emit_error, "hex escape sequence out of range")
+  in
+  emit_fn (Diagnostics.from_span source e.span msg)
+
+let print_pp_number_error (source : Source.t) (e : pp_number_error) : unit =
+  match e with
+  | InvalidSuffix { span } ->
+      Diagnostics.emit_error
+        (Diagnostics.from_span source span "invalid suffix")
+
+let print_conversion_error (source : Source.t) (e : conversion_error) : unit =
+  match e with
+  | StringError errors ->
+      List.iter (fun e -> print_string_error source e) errors
+  | PPNumberError err -> print_pp_number_error source err
+
 let convert_string_error (e : string_error_proto) (source_id : Source.id)
     (source : Source.t) (positions : Source.string_pos list) : string_error =
-  let start = Source.string_index_to_source_pos e.start positions in
-  let finish = Source.string_index_to_source_pos e.finish positions in
+  let start = Source.string_index_to_source_pos e.indices.start positions in
+  let finish = Source.string_index_to_source_pos e.indices.finish positions in
   let length = finish - start + 1 in
   { seq_type = e.seq_type; seq = e.seq; span = { source_id; start; length } }
 
@@ -31,6 +60,15 @@ let convert_string_errors (es : string_error_proto list) (source_id : Source.id)
     (source : Source.t) (positions : Source.string_pos list) : string_error list
     =
   List.map (fun e -> convert_string_error e source_id source positions) es
+
+let convert_pp_number_error (e : pp_number_error_proto) (source_id : Source.id)
+    (source : Source.t) (positions : Source.string_pos list) : pp_number_error =
+  match e with
+  | InvalidSuffix { start; finish } ->
+      let start = Source.string_index_to_source_pos start positions in
+      let finish = Source.string_index_to_source_pos finish positions in
+      let length = finish - start + 1 in
+      InvalidSuffix { span = { source_id; start; length } }
 
 let convert_string (s : string) : string * string_error_proto list =
   let len = String.length s in
@@ -105,8 +143,7 @@ let convert_string (s : string) : string * string_error_proto list =
                   ({
                      seq_type = HexNoDigits;
                      seq = "\\x";
-                     start = i;
-                     finish = i + 1;
+                     indices = { start = i; finish = i + 1 };
                    }
                   :: errors)
               end
@@ -116,8 +153,7 @@ let convert_string (s : string) : string * string_error_proto list =
                   ({
                      seq_type = HexTooLarge;
                      seq = "\\x";
-                     start = i;
-                     finish = hex_end - 1;
+                     indices = { start = i; finish = hex_end - 1 };
                    }
                   :: errors)
               end
@@ -133,8 +169,7 @@ let convert_string (s : string) : string * string_error_proto list =
                 ({
                    seq_type = SeqNormal;
                    seq = Printf.sprintf "\\%c" c;
-                   start = i;
-                   finish = i + 1;
+                   indices = { start = i; finish = i + 1 };
                  }
                 :: errors)
         end
@@ -143,6 +178,87 @@ let convert_string (s : string) : string * string_error_proto list =
           helper (i + 1) errors
   in
   helper 0 []
+
+type parse_int_error = MaybeFloat | InvalidSuffix of index_span
+
+let parse_int_helper ~(base : int) ~(is_digit : char -> bool) (s : string) :
+    (Token.int_literal, parse_int_error) result =
+  let len = String.length s in
+
+  let rec skip_digits (i : int) : int =
+    if i >= len then i else if is_digit s.[i] then skip_digits (i + 1) else i
+  in
+
+  let contains_float_chars (i : int) : bool =
+    if i >= len then false
+    else match s.[i] with '.' | 'e' | 'E' | 'p' | 'P' -> true | _ -> false
+  in
+
+  let make_suffix_str (i : int) : string option =
+    if i >= len then None else Some (String.sub s i (len - i))
+  in
+
+  let parse_suffix (s : string option) : (Token.int_suffix option, unit) result
+      =
+    match s with
+    | None -> Ok None
+    | Some s ->
+        begin match s with
+        | "u" | "U" -> Ok (Some Token.U)
+        | "l" | "L" -> Ok (Some Token.L)
+        | "ll" | "LL" -> Ok (Some Token.LL)
+        | "lu" | "lU" | "Lu" | "LU" -> Ok (Some Token.UL)
+        | "ul" | "uL" | "Ul" | "UL" -> Ok (Some Token.UL)
+        | "ull" | "uLL" | "Ull" | "ULL" -> Ok (Some Token.ULL)
+        | "llu" | "llU" | "LLu" | "LLU" -> Ok (Some Token.ULL)
+        | _ -> Error ()
+        end
+  in
+
+  let suffix_index = skip_digits 0 in
+  if contains_float_chars suffix_index then Error MaybeFloat
+  else begin
+    let digits_str = String.sub s 0 suffix_index in
+    let value = Z.of_string_base base digits_str in
+
+    let suffix_str = make_suffix_str suffix_index in
+    match parse_suffix suffix_str with
+    | Ok suffix -> Ok { value; suffix }
+    | Error () ->
+        Error (InvalidSuffix { start = suffix_index; finish = len - 1 })
+  end
+
+let is_digit_decimal (c : char) : bool =
+  match c with '0' .. '9' -> true | _ -> false
+
+let is_digit_octal (c : char) : bool =
+  match c with '0' .. '7' -> true | _ -> false
+
+let is_digit_hex (c : char) : bool =
+  match c with '0' .. '9' | 'a' .. 'f' | 'A' .. 'F' -> true | _ -> false
+
+let parse_int_decimal = parse_int_helper ~base:10 ~is_digit:is_digit_decimal
+let parse_int_octal = parse_int_helper ~base:8 ~is_digit:is_digit_octal
+let parse_int_hex = parse_int_helper ~base:16 ~is_digit:is_digit_hex
+
+let parse_int_literal (s : string) : (Token.int_literal, parse_int_error) result
+    =
+  if String.length s >= 2 && s.[0] = '0' then
+    begin match s.[1] with
+    | 'x' | 'X' -> parse_int_hex s
+    | _ -> parse_int_octal s
+    end
+  else parse_int_decimal s
+
+let convert_pp_number (s : string) : (Token.kind, pp_number_error_proto) result
+    =
+  match parse_int_literal s with
+  | Ok literal -> Ok (Token.IntLiteral literal)
+  | Error (InvalidSuffix indices) -> Error (InvalidSuffix indices)
+  | Error MaybeFloat -> begin
+      prerr_endline "Implement floats";
+      exit 1
+    end
 
 let keyword_of_string (s : string) : Token.kind option =
   match s with
@@ -209,6 +325,14 @@ let convert_token (token : Token.t) (manager : Source.manager) :
             )
       end
     end
+  | PPNumber value ->
+      begin match convert_pp_number value.string with
+      | Ok kind -> Success { token with kind }
+      | Error err ->
+          Unrecoverable
+            (PPNumberError
+               (convert_pp_number_error err source_id source value.positions))
+      end
   | PPString value -> begin
       begin match convert_string value.string with
       | new_str, [] -> Success { token with kind = StringLiteral new_str }

@@ -1,5 +1,5 @@
 (library
-  (name test_pp)
+  (name test_converter)
   (inline_tests)
   (libraries ocaml_cc test_utils)
   (preprocess (pps ppx_expect)))

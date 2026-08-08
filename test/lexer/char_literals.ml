@@ -1,5 +1,5 @@
 let%expect_test "ordinary char literal" =
-  Helpers.test_lexer {|
+  Test.test_lexer {|
 'A' 'Z'
 'a' 'z'
 '1' '9'
@@ -24,7 +24,7 @@ let%expect_test "ordinary char literal" =
     |}]
 
 let%expect_test "escape sequences" =
-  Helpers.test_lexer
+  Test.test_lexer
     {|
 '\a' '\b' '\e' '\f'
 '\n' '\r' '\t' '\v'
@@ -52,7 +52,7 @@ let%expect_test "escape sequences" =
     |}]
 
 let%expect_test "octal sequences" =
-  Helpers.test_lexer {|
+  Test.test_lexer {|
 '\0' '\7' '\123' '\777'
 |};
   [%expect
@@ -67,7 +67,7 @@ let%expect_test "octal sequences" =
     |}]
 
 let%expect_test "hex sequences" =
-  Helpers.test_lexer {|
+  Test.test_lexer {|
 '\x00' '\x1b' '\x41' '\xff'
 |};
   [%expect
@@ -82,7 +82,7 @@ let%expect_test "hex sequences" =
     |}]
 
 let%expect_test "multichar" =
-  Helpers.test_lexer {|
+  Test.test_lexer {|
 'abc' 'def' 'ghi' '   '
 |};
   [%expect
@@ -97,7 +97,7 @@ let%expect_test "multichar" =
     |}]
 
 let%expect_test "errors" =
-  Helpers.test_lexer {|
+  Test.test_lexer {|
 ''
 'a
 |};
@@ -111,7 +111,7 @@ let%expect_test "errors" =
     |}]
 
 let%expect_test "new_line_splicing" =
-  Helpers.test_lexer ~verbose:true {|
+  Test.test_lexer ~verbose:true {|
 'a\ 
 b\ 
 c\ 

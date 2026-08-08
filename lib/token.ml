@@ -1,6 +1,7 @@
 type header_type = Local | NonLocal
 type header_name = { filepath : string; type_ : header_type }
-type int_literal = { value : Z.t; suffix : string option }
+type int_suffix = U | L | UL | LL | ULL
+type int_literal = { value : Z.t; suffix : int_suffix option }
 
 type invalid =
   | EmptyCharLiteral
@@ -14,7 +15,7 @@ type kind =
   (* Preprocessing *)
   | HeaderName of header_name
   | PPChar of Source.string_src
-  | PPNumber of string
+  | PPNumber of Source.string_src
   | PPString of Source.string_src
   (* Keywords *)
   | Auto
@@ -146,8 +147,8 @@ let pp_kind_name (fmt : Format.formatter) (kind : kind) =
   (* Preprocessor *)
   | HeaderName { filepath; _ } -> Format.fprintf fmt "HeaderName(%S)" filepath
   | PPChar { string; _ } -> Format.fprintf fmt "PPChar(%S)" string
-  | PPNumber value -> Format.fprintf fmt "PPNumber(%S)" value
-  | PPString { string } -> Format.fprintf fmt "PPString(%S)" string
+  | PPNumber { string; _ } -> Format.fprintf fmt "PPNumber(%S)" string
+  | PPString { string; _ } -> Format.fprintf fmt "PPString(%S)" string
   (* Keywords *)
   | Auto -> Format.fprintf fmt "Auto"
   | Break -> Format.fprintf fmt "Break"
@@ -258,21 +259,21 @@ let pp_kind_name (fmt : Format.formatter) (kind : kind) =
       end
 
 let pp_kind_fields (fmt : Format.formatter) (kind : kind) =
+  let pp_splices_list (fmt : Format.formatter) (slices : Source.string_pos list)
+      : unit =
+    Format.fprintf fmt "@[<v 2>";
+    Format.fprintf fmt "splices:";
+    Format.fprintf fmt "@,%a" Source.pp_string_pos_list slices;
+    Format.fprintf fmt "@]"
+  in
+
   match kind with
   | HeaderName { filepath; type_ } ->
       Format.fprintf fmt "filepath: %S" filepath;
       Format.fprintf fmt "@,type: %a" pp_header_type type_
-  | PPChar value ->
-      Format.fprintf fmt "@[<v 2>";
-      Format.fprintf fmt "splices:";
-      Format.fprintf fmt "@,%a" Source.pp_string_pos_list value.positions;
-      Format.fprintf fmt "@]"
-  (* | PPNumber value -> Printf.sprintf "PPNumber {%s}" value *)
-  | PPString value ->
-      Format.fprintf fmt "@[<v 2>";
-      Format.fprintf fmt "splices:";
-      Format.fprintf fmt "@,%a" Source.pp_string_pos_list value.positions;
-      Format.fprintf fmt "@]"
+  | PPChar value -> pp_splices_list fmt value.positions
+  | PPNumber value -> pp_splices_list fmt value.positions
+  | PPString value -> pp_splices_list fmt value.positions
   | _ -> ()
 
 let has_fields (kind : kind) : bool =

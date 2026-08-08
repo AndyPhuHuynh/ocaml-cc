@@ -1,5 +1,5 @@
 (library
   (name test_lexer)
   (inline_tests)
-  (libraries ocaml_cc)
+  (libraries test_utils)
   (preprocess (pps ppx_expect)))

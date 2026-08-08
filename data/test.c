@@ -9,7 +9,7 @@ int main() {
 //
 //     char c3 = '\\
 // d'; int what = 2;
-    char c4 = '';
+    int x = 2ep;
     // printf("%c\n", c1);
     // printf("%c\n", c2);
     // printf("%s\n", s);

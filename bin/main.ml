@@ -1,24 +1,5 @@
 open Ocaml_cc
 
-let print_string_error (source : Source.t) (e : Token_converter.string_error) :
-    unit =
-  let emit_fn, msg =
-    match e.seq_type with
-    | SeqNormal ->
-        ( Diagnostics.emit_warning,
-          Printf.sprintf "unknown escape sequence '%s'" e.seq )
-    | HexNoDigits ->
-        (Diagnostics.emit_error, "\\x used with no following hex digits")
-    | HexTooLarge -> (Diagnostics.emit_error, "hex escape sequence out of range")
-  in
-  emit_fn (Diagnostics.from_span source e.span msg)
-
-let print_conversion_error (source : Source.t)
-    (e : Token_converter.conversion_error) : unit =
-  match e with
-  | StringError errors ->
-      List.iter (fun e -> print_string_error source e) errors
-
 let () =
   let usage_msg = "ocaml-cc -i <input>" in
   let input_file = ref "" in

@@ -1,5 +1,5 @@
 let%expect_test "digits" =
-  Helpers.test_lexer {|
+  Test.test_lexer {|
 0 1 2 3 4 5 6 7 8 9
 123 456 789
 |};
@@ -25,7 +25,7 @@ let%expect_test "digits" =
     |}]
 
 let%expect_test "with dot" =
-  Helpers.test_lexer {|
+  Test.test_lexer {|
 .123 .456 .678
 123. 456. 789.
 |};
@@ -44,7 +44,7 @@ let%expect_test "with dot" =
     |}]
 
 let%expect_test "exponent sign" =
-  Helpers.test_lexer {|
+  Test.test_lexer {|
 123e+1 456E-2
 123p+1 456P-2
 |};
@@ -61,7 +61,7 @@ let%expect_test "exponent sign" =
     |}]
 
 let%expect_test "suffix" =
-  Helpers.test_lexer {|
+  Test.test_lexer {|
 123abc 567.def 789e+10ghi
 |};
   [%expect
@@ -75,7 +75,7 @@ let%expect_test "suffix" =
     |}]
 
 let%expect_test "not pp-number" =
-  Helpers.test_lexer {|
+  Test.test_lexer {|
 123+1 456-2
 +1    -2
 .foo  .

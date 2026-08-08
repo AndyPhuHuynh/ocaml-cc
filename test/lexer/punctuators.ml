@@ -1,5 +1,5 @@
 let%expect_test "punctuators" =
-  Helpers.test_lexer
+  Test.test_lexer
     {|
 [](){}.->
 ++--&*+-~!
