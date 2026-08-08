@@ -30,15 +30,18 @@ let () =
     exit 1
   end;
 
-  match Inspect.lex_all (Source.LoadFile { filepath = !input_file }) with
+  match
+    Inspect.lex_all
+      (Source.LoadFile { display_name = None; filepath = !input_file })
+  with
   | Ok (tokens, manager) -> begin
       List.iter
         (fun tok -> Format.printf "%a@.@." (Token.pp_verbose manager) tok)
         tokens
     end
-  | Error FileNotFound ->
+  | Error (FileNotFound filepath) ->
       Diagnostics.emit_driver_error
-        (Printf.sprintf "file not found: %s" !input_file)
+        (Printf.sprintf "file not found: %s" filepath)
   | Error (IOError msg) -> Diagnostics.emit_driver_error msg
 
 (* match Inspect.pp_all !input_file with *)

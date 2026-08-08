@@ -5,6 +5,8 @@ type t = {
   message : string;
 }
 
+exception Exit of int
+
 (* diagnostic constructors *)
 val at : Source.t -> Source.loc -> string -> t
 val range : Source.t -> Source.loc -> Source.loc -> string -> t

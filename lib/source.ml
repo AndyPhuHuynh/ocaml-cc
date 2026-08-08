@@ -1,4 +1,10 @@
-type t = { filepath : string; contents : string; line_offsets : int array }
+type t = {
+  display_name : string;
+  filepath : string;
+  contents : string;
+  line_offsets : int array;
+}
+
 type id = int
 type loc = { line : int; col : int }
 type pos = { index : int; loc : loc }
@@ -15,11 +21,10 @@ type manager = {
   from_filepath : id StringMap.t;
 }
 
-type load_type =
-  | LoadString of { name : string; contents : string }
-  | LoadFile of { filepath : string }
-
-type load_error = FileNotFound | IOError of string
+type load_string = { name : string; contents : string }
+type load_file = { display_name : string option; filepath : string }
+type load_type = LoadString of load_string | LoadFile of load_file
+type load_error = FileNotFound of string | IOError of string
 
 let read_entire_file (name : string) : string =
   In_channel.with_open_text name In_channel.input_all
@@ -83,31 +88,43 @@ let add_source (manager : manager) (source : t) : manager * id * t =
   in
   (new_manager, manager.next_id, source)
 
-let load_string (manager : manager) ~(name : string) (contents : string) :
-    manager * id * t =
-  match StringMap.find_opt name manager.from_filepath with
+let load_string (manager : manager) (string : load_string) : manager * id * t =
+  match StringMap.find_opt string.name manager.from_filepath with
   | Some id -> (manager, id, IntMap.find id manager.from_id)
   | None ->
       let source =
         {
-          filepath = name;
-          contents;
-          line_offsets = calculate_line_offsets contents;
+          display_name = string.name;
+          filepath = string.name;
+          contents = string.contents;
+          line_offsets = calculate_line_offsets string.contents;
         }
       in
       add_source manager source
 
-let load_file (manager : manager) (filepath : string) :
+let load_file (manager : manager) (file : load_file) :
     (manager * id * t, load_error) result =
-  let filepath = filepath |> make_absolute_path |> cannonize_if_exists in
+  let filepath = file.filepath |> make_absolute_path |> cannonize_if_exists in
   match StringMap.find_opt filepath manager.from_filepath with
   | Some id -> Ok (manager, id, IntMap.find id manager.from_id)
-  | None when not (is_regular_file filepath) -> Error FileNotFound
+  | None when not (is_regular_file filepath) ->
+      let name = Option.value file.display_name ~default:file.filepath in
+      Error (FileNotFound name)
   | None -> (
       try
+        let display_name =
+          match file.display_name with
+          | None -> file.filepath
+          | Some name -> name
+        in
         let contents = read_entire_file filepath in
         let source =
-          { filepath; contents; line_offsets = calculate_line_offsets contents }
+          {
+            display_name;
+            filepath;
+            contents;
+            line_offsets = calculate_line_offsets contents;
+          }
         in
         Ok (add_source manager source)
       with Sys_error msg -> Error (IOError msg))
@@ -115,8 +132,8 @@ let load_file (manager : manager) (filepath : string) :
 let load (manager : manager) (type_ : load_type) :
     (manager * id * t, load_error) result =
   match type_ with
-  | LoadString { name; contents } -> Ok (load_string manager ~name contents)
-  | LoadFile { filepath } -> load_file manager filepath
+  | LoadString str -> Ok (load_string manager str)
+  | LoadFile file -> load_file manager file
 
 let get_source (manager : manager) (id : id) : t =
   IntMap.find id manager.from_id

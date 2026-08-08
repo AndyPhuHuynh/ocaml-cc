@@ -1,4 +1,10 @@
-type t = { filepath : string; contents : string; line_offsets : int array }
+type t = {
+  display_name : string;
+  filepath : string;
+  contents : string;
+  line_offsets : int array;
+}
+
 type id
 type loc = { line : int; col : int }
 type pos = { index : int; loc : loc }
@@ -6,12 +12,10 @@ type span = { source_id : id; start : int; length : int }
 type string_pos = { index : int; loc : loc }
 type string_src = { string : string; positions : string_pos list }
 type manager
-
-type load_type =
-  | LoadString of { name : string; contents : string }
-  | LoadFile of { filepath : string }
-
-type load_error = FileNotFound | IOError of string
+type load_string = { name : string; contents : string }
+type load_file = { display_name : string option; filepath : string }
+type load_type = LoadString of load_string | LoadFile of load_file
+type load_error = FileNotFound of string | IOError of string
 
 (* loc *)
 val make_loc : int -> int -> loc
@@ -28,8 +32,8 @@ val empty_manager : manager
 
 (* load source *)
 val load : manager -> load_type -> (manager * id * t, load_error) result
-val load_string : manager -> name:string -> string -> manager * id * t
-val load_file : manager -> string -> (manager * id * t, load_error) result
+val load_string : manager -> load_string -> manager * id * t
+val load_file : manager -> load_file -> (manager * id * t, load_error) result
 
 (**)
 val get_source : manager -> id -> t

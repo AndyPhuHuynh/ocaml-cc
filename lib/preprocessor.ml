@@ -25,8 +25,8 @@ let print_include_stack (pp : t) : unit =
   List.iter
     (fun source ->
       let loc = Option.get source.child_include_location in
-      Printf.eprintf "In file included from %s:%d:%d\n" source.source.filepath
-        loc.line loc.col)
+      Printf.eprintf "In file included from %s:%d:%d\n"
+        source.source.display_name loc.line loc.col)
     stack
 
 let emit_error (pp : t) (diag : Diagnostics.t) : t =
@@ -44,7 +44,7 @@ let emit_fatal_error (pp : t) (diag : Diagnostics.t) (exit_code : int) : 'a =
   if not pp.include_stack_printed then begin
     print_include_stack pp
   end;
-  Diagnostics.emit_fatal_error diag
+  Diagnostics.emit_fatal_error diag exit_code
 
 let get_paths_from_include (current_file : string) (include_ : string) =
   Filename.concat (Filename.dirname current_file) include_
@@ -60,11 +60,9 @@ let update_lexer (pp : t) (lexer : Lexer.t) : t =
   let source_stack = { pp.source_stack with current } in
   { pp with source_stack }
 
-let append_source (pp : t) (filepath : string) (include_location : Source.loc) :
-    (t, Source.load_error) result =
-  let* source_manager, id, source =
-    Source.load_file pp.source_manager filepath
-  in
+let append_source (pp : t) (source : Source.load_file)
+    (include_location : Source.loc) : (t, Source.load_error) result =
+  let* source_manager, id, source = Source.load_file pp.source_manager source in
 
   let current =
     {
@@ -123,23 +121,28 @@ let process_directive_include (pp : t) (include_location : Source.loc) : t =
       in
 
       if pp.source_stack.size >= 256 then begin
-        Diagnostics.emit_fatal_error
-          (Diagnostics.at (get_current_source pp) token.loc
-             "maximum include depth exceeded")
-          1
+        let diag =
+          Diagnostics.at (get_current_source pp) token.loc
+            "maximum include depth exceeded"
+        in
+        emit_fatal_error pp diag 1
       end;
 
-      match append_source pp full_path include_location with
+      match
+        append_source pp
+          { display_name = Some filepath; filepath = full_path }
+          include_location
+      with
       | Ok new_pp -> new_pp
-      | Error FileNotFound ->
+      | Error (FileNotFound filepath) ->
           let source = get_current_source pp in
-          Diagnostics.emit_fatal_error
+          emit_fatal_error pp
             (Diagnostics.range source token.loc
                (Source.get_span_end source token.span)
                (Printf.sprintf "'%s' file not found" filepath))
             1
       | Error (IOError msg) ->
-          Diagnostics.emit_fatal_error
+          emit_fatal_error pp
             (Diagnostics.at (get_current_source pp) token.loc msg)
             1
     end
@@ -167,8 +170,8 @@ let process_directive (pp : t) (hash_location : Source.loc) : t =
   | NewLine -> update_lexer pp lexer
   | _ -> process_directive_invalid pp
 
-let create (load_type : Source.load_type) : (t, Source.load_error) result =
-  let source_manager = Source.empty_manager in
+let create_with_manager (load_type : Source.load_type)
+    (source_manager : Source.manager) : (t, Source.load_error) result =
   let* new_manager, source_id, source = Source.load source_manager load_type in
   let lexer = Lexer.create source_id source in
 
@@ -185,6 +188,9 @@ let create (load_type : Source.load_type) : (t, Source.load_error) result =
           size = 0;
         };
     }
+
+let create (load_type : Source.load_type) : (t, Source.load_error) result =
+  create_with_manager load_type Source.empty_manager
 
 let get_source_manager (pp : t) : Source.manager = pp.source_manager
 

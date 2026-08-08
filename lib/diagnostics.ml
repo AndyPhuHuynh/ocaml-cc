@@ -5,6 +5,8 @@ type t = {
   message : string;
 }
 
+exception Exit of int
+
 let at (source : Source.t) (start : Source.loc) (message : string) : t =
   { source; highlight_start = start; highlight_end = None; message }
 
@@ -83,7 +85,7 @@ let emit_multi_caret (source : Source.t) (start_loc : Source.loc)
 
 let emit_helper (severity : string) (diag : t) : unit =
   let loc =
-    Printf.sprintf "%s:%d:%d" diag.source.filepath diag.highlight_start.line
+    Printf.sprintf "%s:%d:%d" diag.source.display_name diag.highlight_start.line
       diag.highlight_start.col
   in
   Printf.eprintf "%s: %s: %s\n" (Color.bold loc) severity
@@ -98,7 +100,7 @@ let emit_error = emit_helper (Color.bold_red "error")
 
 let emit_fatal_error (diag : t) (exit_code : int) : 'a =
   emit_helper (Color.bold_red "fatal error") diag;
-  exit exit_code
+  raise (Exit exit_code)
 
 let emit_driver_error (msg : string) : unit =
   Printf.eprintf "ocaml-cc: error: %s\n" msg

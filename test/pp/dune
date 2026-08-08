@@ -1,0 +1,5 @@
+(library
+  (name test_pp)
+  (inline_tests)
+  (libraries ocaml_cc)
+  (preprocess (pps ppx_expect)))
