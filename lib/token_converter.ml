@@ -13,8 +13,13 @@ type string_error = {
   span : Source.span;
 }
 
-type pp_number_error_proto = InvalidSuffix of index_span
-type pp_number_error = InvalidSuffix of { span : Source.span }
+type pp_number_error_proto =
+  | InvalidDigit of { digit : char; is_octal : bool; index : int }
+  | InvalidSuffix of { suffix : string; indices : index_span }
+
+type pp_number_error =
+  | InvalidDigit of { digit : char; is_octal : bool; loc : Source.loc }
+  | InvalidSuffix of { suffix : string; span : Source.span }
 
 type conversion_error =
   | StringError of string_error list
@@ -39,9 +44,17 @@ let print_string_error (source : Source.t) (e : string_error) : unit =
 
 let print_pp_number_error (source : Source.t) (e : pp_number_error) : unit =
   match e with
-  | InvalidSuffix { span } ->
-      Diagnostics.emit_error
-        (Diagnostics.from_span source span "invalid suffix")
+  | InvalidDigit { digit; is_octal; loc } ->
+      let type_ = if is_octal then "octal" else "integer" in
+      let msg =
+        Printf.sprintf "invalid digit '%c' in %s constant" digit type_
+      in
+      Diagnostics.emit_error (Diagnostics.at source loc msg)
+  | InvalidSuffix { suffix; span } ->
+      let msg =
+        Printf.sprintf "invalid suffix '%s' on integer constant" suffix
+      in
+      Diagnostics.emit_error (Diagnostics.from_span source span msg)
 
 let print_conversion_error (source : Source.t) (e : conversion_error) : unit =
   match e with
@@ -68,11 +81,14 @@ let convert_string_errors (es : string_error_proto list) (source_id : Source.id)
 let convert_pp_number_error (e : pp_number_error_proto) (source_id : Source.id)
     (source : Source.t) (positions : Source.string_pos list) : pp_number_error =
   match e with
-  | InvalidSuffix { start; finish } ->
+  | InvalidDigit { digit; is_octal; index } ->
+      let loc = Source.string_index_to_source_loc source index positions in
+      InvalidDigit { digit; is_octal; loc }
+  | InvalidSuffix { suffix; indices = { start; finish } } ->
       let start = Source.string_index_to_source_pos source start positions in
       let finish = Source.string_index_to_source_pos source finish positions in
       let length = finish - start + 1 in
-      InvalidSuffix { span = { source_id; start; length } }
+      InvalidSuffix { suffix; span = { source_id; start; length } }
 
 let convert_string (s : string) : string * string_error_proto list =
   let len = String.length s in
@@ -183,7 +199,18 @@ let convert_string (s : string) : string * string_error_proto list =
   in
   helper 0 []
 
-type parse_int_error = MaybeFloat | InvalidSuffix of index_span
+let is_digit_decimal (c : char) : bool =
+  match c with '0' .. '9' -> true | _ -> false
+
+let is_digit_octal (c : char) : bool =
+  match c with '0' .. '7' -> true | _ -> false
+
+let is_digit_hex (c : char) : bool =
+  match c with '0' .. '9' | 'a' .. 'f' | 'A' .. 'F' -> true | _ -> false
+
+type parse_int_error =
+  | MaybeFloat
+  | PPNumberErrorProto of pp_number_error_proto
 
 let parse_int_helper ~(base : int) ~(is_digit : char -> bool) (s : string)
     (digits_index : int) : (Token.int_literal, parse_int_error) result =
@@ -202,8 +229,8 @@ let parse_int_helper ~(base : int) ~(is_digit : char -> bool) (s : string)
     if i >= len then None else Some (String.sub s i (len - i))
   in
 
-  let parse_suffix (s : string option) : (Token.int_suffix option, unit) result
-      =
+  let parse_suffix (s : string option) :
+      (Token.int_suffix option, string) result =
     match s with
     | None -> Ok None
     | Some s ->
@@ -215,12 +242,21 @@ let parse_int_helper ~(base : int) ~(is_digit : char -> bool) (s : string)
         | "ul" | "uL" | "Ul" | "UL" -> Ok (Some Token.UL)
         | "ull" | "uLL" | "Ull" | "ULL" -> Ok (Some Token.ULL)
         | "llu" | "llU" | "LLu" | "LLU" -> Ok (Some Token.ULL)
-        | _ -> Error ()
+        | _ -> Error s
         end
   in
 
   let suffix_index = skip_digits digits_index in
   if contains_float_chars suffix_index then Error MaybeFloat
+  else if suffix_index < len && is_digit_hex s.[suffix_index] then
+    Error
+      (PPNumberErrorProto
+         (InvalidDigit
+            {
+              digit = s.[suffix_index];
+              is_octal = base = 8;
+              index = suffix_index;
+            }))
   else begin
     let digits_str = String.sub s digits_index (suffix_index - digits_index) in
     let value = Z.of_string_base base digits_str in
@@ -228,18 +264,12 @@ let parse_int_helper ~(base : int) ~(is_digit : char -> bool) (s : string)
     let suffix_str = make_suffix_str suffix_index in
     match parse_suffix suffix_str with
     | Ok suffix -> Ok { value; suffix }
-    | Error () ->
-        Error (InvalidSuffix { start = suffix_index; finish = len - 1 })
+    | Error suffix ->
+        Error
+          (PPNumberErrorProto
+             (InvalidSuffix
+                { suffix; indices = { start = suffix_index; finish = len - 1 } }))
   end
-
-let is_digit_decimal (c : char) : bool =
-  match c with '0' .. '9' -> true | _ -> false
-
-let is_digit_octal (c : char) : bool =
-  match c with '0' .. '7' -> true | _ -> false
-
-let is_digit_hex (c : char) : bool =
-  match c with '0' .. '9' | 'a' .. 'f' | 'A' .. 'F' -> true | _ -> false
 
 let parse_int_decimal = parse_int_helper ~base:10 ~is_digit:is_digit_decimal
 let parse_int_octal = parse_int_helper ~base:8 ~is_digit:is_digit_octal
@@ -258,7 +288,7 @@ let convert_pp_number (s : string) : (Token.kind, pp_number_error_proto) result
     =
   match parse_int_literal s with
   | Ok literal -> Ok (Token.IntLiteral literal)
-  | Error (InvalidSuffix indices) -> Error (InvalidSuffix indices)
+  | Error (PPNumberErrorProto err) -> Error err
   | Error MaybeFloat -> begin
       prerr_endline "Implement floats";
       exit 1

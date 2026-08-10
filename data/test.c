@@ -9,6 +9,9 @@ int main() {
 //
 //     char c3 = '\\
 // d'; int what = 2;
+    int a = 2aabc;
+    int b = 0xabcghi;
+    int c = 0123abckl
     int x = 2ep;
     // printf("%c\n", c1);
     // printf("%c\n", c2);

@@ -174,6 +174,21 @@ let string_index_to_source_pos (source : t) (index : int)
 
   base_pos + offset
 
+let string_index_to_source_loc (source : t) (index : int)
+    (positions : string_pos list) : loc =
+  let rec find_base_index_pos (positions : string_pos list) : string_pos =
+    match positions with
+    | [] -> failwith "index_to_source_pos failed with empty positions"
+    | [ x ] -> x
+    | a :: b :: xs ->
+        if b.index > index then a else find_base_index_pos (b :: xs)
+  in
+
+  let base_index_pos = find_base_index_pos positions in
+  let line = base_index_pos.loc.line in
+  let col = index - base_index_pos.index + 1 in
+  { line; col }
+
 let pp_string_pos (fmt : Format.formatter) (value : string_pos) : unit =
   Format.fprintf fmt "{ i: %4d; loc: %3d:%-3d }" value.index value.loc.line
     value.loc.col

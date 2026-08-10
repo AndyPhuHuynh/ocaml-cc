@@ -6,7 +6,9 @@ type string_error = {
   span : Source.span;
 }
 
-type pp_number_error = InvalidSuffix of { span : Source.span }
+type pp_number_error =
+  | InvalidDigit of { digit : char; is_octal : bool; loc : Source.loc }
+  | InvalidSuffix of { suffix : string; span : Source.span }
 
 type conversion_error =
   | StringError of string_error list
