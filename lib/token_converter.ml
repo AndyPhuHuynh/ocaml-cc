@@ -51,8 +51,12 @@ let print_conversion_error (source : Source.t) (e : conversion_error) : unit =
 
 let convert_string_error (e : string_error_proto) (source_id : Source.id)
     (source : Source.t) (positions : Source.string_pos list) : string_error =
-  let start = Source.string_index_to_source_pos e.indices.start positions in
-  let finish = Source.string_index_to_source_pos e.indices.finish positions in
+  let start =
+    Source.string_index_to_source_pos source e.indices.start positions
+  in
+  let finish =
+    Source.string_index_to_source_pos source e.indices.finish positions
+  in
   let length = finish - start + 1 in
   { seq_type = e.seq_type; seq = e.seq; span = { source_id; start; length } }
 
@@ -65,8 +69,8 @@ let convert_pp_number_error (e : pp_number_error_proto) (source_id : Source.id)
     (source : Source.t) (positions : Source.string_pos list) : pp_number_error =
   match e with
   | InvalidSuffix { start; finish } ->
-      let start = Source.string_index_to_source_pos start positions in
-      let finish = Source.string_index_to_source_pos finish positions in
+      let start = Source.string_index_to_source_pos source start positions in
+      let finish = Source.string_index_to_source_pos source finish positions in
       let length = finish - start + 1 in
       InvalidSuffix { span = { source_id; start; length } }
 
@@ -181,8 +185,8 @@ let convert_string (s : string) : string * string_error_proto list =
 
 type parse_int_error = MaybeFloat | InvalidSuffix of index_span
 
-let parse_int_helper ~(base : int) ~(is_digit : char -> bool) (s : string) :
-    (Token.int_literal, parse_int_error) result =
+let parse_int_helper ~(base : int) ~(is_digit : char -> bool) (s : string)
+    (digits_index : int) : (Token.int_literal, parse_int_error) result =
   let len = String.length s in
 
   let rec skip_digits (i : int) : int =
@@ -215,10 +219,10 @@ let parse_int_helper ~(base : int) ~(is_digit : char -> bool) (s : string) :
         end
   in
 
-  let suffix_index = skip_digits 0 in
+  let suffix_index = skip_digits digits_index in
   if contains_float_chars suffix_index then Error MaybeFloat
   else begin
-    let digits_str = String.sub s 0 suffix_index in
+    let digits_str = String.sub s digits_index (suffix_index - digits_index) in
     let value = Z.of_string_base base digits_str in
 
     let suffix_str = make_suffix_str suffix_index in
@@ -245,10 +249,10 @@ let parse_int_literal (s : string) : (Token.int_literal, parse_int_error) result
     =
   if String.length s >= 2 && s.[0] = '0' then
     begin match s.[1] with
-    | 'x' | 'X' -> parse_int_hex s
-    | _ -> parse_int_octal s
+    | 'x' | 'X' -> parse_int_hex s 2
+    | _ -> parse_int_octal s 1
     end
-  else parse_int_decimal s
+  else parse_int_decimal s 0
 
 let convert_pp_number (s : string) : (Token.kind, pp_number_error_proto) result
     =

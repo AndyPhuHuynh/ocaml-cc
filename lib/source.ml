@@ -62,6 +62,9 @@ let get_loc_from_pos (source : t) (pos : int) : loc =
   let col = pos - source.line_offsets.(index) + 1 in
   { line; col }
 
+let get_pos_from_loc (source : t) (loc : loc) : int =
+  source.line_offsets.(loc.line - 1) + (loc.col - 1)
+
 let default_pos : pos = { index = 0; loc = { line = 1; col = 1 } }
 
 let make_absolute_path (path : string) =
@@ -177,18 +180,21 @@ let span_to_string (span : span) (manager : manager) : string =
   let source = get_source manager span.source_id in
   String.sub source.contents span.start span.length
 
-let string_index_to_source_pos (index : int) (positions : string_pos list) : int
-    =
-  let rec find_base_pos (positions : string_pos list) : string_pos =
+let string_index_to_source_pos (source : t) (index : int)
+    (positions : string_pos list) : int =
+  let rec find_base_index_pos (positions : string_pos list) : string_pos =
     match positions with
     | [] -> failwith "index_to_source_pos failed with empty positions"
     | [ x ] -> x
-    | a :: b :: xs -> if b.index > index then a else find_base_pos (b :: xs)
+    | a :: b :: xs ->
+        if b.index > index then a else find_base_index_pos (b :: xs)
   in
 
-  let base_pos = find_base_pos positions in
-  let offset = index - base_pos.index in
-  base_pos.index + offset
+  let base_index_pos = find_base_index_pos positions in
+  let base_pos = get_pos_from_loc source base_index_pos.loc in
+  let offset = index - base_index_pos.index in
+
+  base_pos + offset
 
 let pp_string_pos (fmt : Format.formatter) (value : string_pos) : unit =
   Format.fprintf fmt "{ i: %4d; loc: %3d:%-3d }" value.index value.loc.line
