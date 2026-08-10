@@ -21,9 +21,7 @@ type manager = {
   from_filepath : id StringMap.t;
 }
 
-type load_string = { name : string; contents : string }
 type load_file = { display_name : string option; filepath : string }
-type load_type = LoadString of load_string | LoadFile of load_file
 type load_error = FileNotFound of string | IOError of string
 
 let read_entire_file (name : string) : string =
@@ -91,20 +89,6 @@ let add_source (manager : manager) (source : t) : manager * id * t =
   in
   (new_manager, manager.next_id, source)
 
-let load_string (manager : manager) (string : load_string) : manager * id * t =
-  match StringMap.find_opt string.name manager.from_filepath with
-  | Some id -> (manager, id, IntMap.find id manager.from_id)
-  | None ->
-      let source =
-        {
-          display_name = string.name;
-          filepath = string.name;
-          contents = string.contents;
-          line_offsets = calculate_line_offsets string.contents;
-        }
-      in
-      add_source manager source
-
 let load_file (manager : manager) (file : load_file) :
     (manager * id * t, load_error) result =
   let filepath = file.filepath |> make_absolute_path |> cannonize_if_exists in
@@ -131,12 +115,6 @@ let load_file (manager : manager) (file : load_file) :
         in
         Ok (add_source manager source)
       with Sys_error msg -> Error (IOError msg))
-
-let load (manager : manager) (type_ : load_type) :
-    (manager * id * t, load_error) result =
-  match type_ with
-  | LoadString str -> Ok (load_string manager str)
-  | LoadFile file -> load_file manager file
 
 let get_source (manager : manager) (id : id) : t =
   IntMap.find id manager.from_id

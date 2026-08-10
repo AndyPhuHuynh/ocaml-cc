@@ -2,4 +2,4 @@
   (name test_utils)
   (wrapped false)
   (libraries ocaml_cc)
-  (private_modules files))
+  (private_modules files runner))

@@ -14,7 +14,7 @@ let print_result ?(verbose : bool = false) (result : inspect_result) : unit =
       Format.printf "@[<v>%a@]@.@." (formatter manager) tokens
   | Error err -> print_source_error err
 
-let lex_all (load_type : Source.load_type) : inspect_result =
+let lex_all (load_file : Source.load_file) : inspect_result =
   let rec helper (lexer : Lexer.t) (acc : Token.t list) =
     let tok, lexer =
       match acc with
@@ -29,11 +29,11 @@ let lex_all (load_type : Source.load_type) : inspect_result =
     | _ -> helper lexer (tok :: acc)
   in
 
-  match Source.load Source.empty_manager load_type with
+  match Source.load_file Source.empty_manager load_file with
   | Ok (manager, id, source) -> Ok (helper (Lexer.create id source) [], manager)
   | Error err -> Error err
 
-let pp_all (load_type : Source.load_type) (manager : Source.manager) :
+let pp_all (load_file : Source.load_file) (manager : Source.manager) :
     inspect_result =
   let rec helper (pp : Preprocessor.t) (acc : Token.t list) :
       Token.t list * Source.manager =
@@ -43,13 +43,13 @@ let pp_all (load_type : Source.load_type) (manager : Source.manager) :
     | _ -> helper pp (tok :: acc)
   in
 
-  match Preprocessor.create_with_manager load_type manager with
+  match Preprocessor.create load_file with
   | Ok pp -> Ok (helper pp [])
   | Error err -> Error err
 
-let convert_all (load_type : Source.load_type) (manager : Source.manager) :
+let convert_all (load_file : Source.load_file) (manager : Source.manager) :
     inspect_result =
-  match pp_all load_type manager with
+  match pp_all load_file manager with
   | Ok (tokens, manager) -> begin
       let tokens =
         List.filter_map

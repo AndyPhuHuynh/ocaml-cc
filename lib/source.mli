@@ -12,9 +12,7 @@ type span = { source_id : id; start : int; length : int }
 type string_pos = { index : int; loc : loc }
 type string_src = { string : string; positions : string_pos list }
 type manager
-type load_string = { name : string; contents : string }
 type load_file = { display_name : string option; filepath : string }
-type load_type = LoadString of load_string | LoadFile of load_file
 type load_error = FileNotFound of string | IOError of string
 
 (* loc *)
@@ -32,8 +30,6 @@ val is_regular_file : string -> bool
 val empty_manager : manager
 
 (* load source *)
-val load : manager -> load_type -> (manager * id * t, load_error) result
-val load_string : manager -> load_string -> manager * id * t
 val load_file : manager -> load_file -> (manager * id * t, load_error) result
 
 (**)

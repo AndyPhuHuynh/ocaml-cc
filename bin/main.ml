@@ -11,10 +11,7 @@ let () =
     exit 1
   end;
 
-  match
-    Inspect.lex_all
-      (Source.LoadFile { display_name = None; filepath = !input_file })
-  with
+  match Inspect.lex_all { display_name = None; filepath = !input_file } with
   | Ok (tokens, manager) -> begin
       List.iter
         (fun tok -> Format.printf "%a@.@." (Token.pp_verbose manager) tok)
