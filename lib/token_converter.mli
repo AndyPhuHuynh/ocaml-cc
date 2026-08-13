@@ -8,7 +8,10 @@ type string_error = {
 
 type pp_number_error =
   | InvalidDigit of { digit : char; is_octal : bool; loc : Source.loc }
-  | InvalidSuffix of { suffix : string; span : Source.span }
+  | InvalidSuffix of { suffix : string; is_float : bool; span : Source.span }
+  | ExponentNoDigits of { loc : Source.loc }
+  | HexFloatNoExponent of { loc : Source.loc }
+  | HexFloatNoSignificand of { loc : Source.loc }
 
 type conversion_error =
   | StringError of string_error list

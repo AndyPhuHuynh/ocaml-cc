@@ -2,6 +2,8 @@ type header_type = Local | NonLocal
 type header_name = { filepath : string; type_ : header_type }
 type int_suffix = U | L | UL | LL | ULL
 type int_literal = { value : Z.t; suffix : int_suffix option }
+type float_suffix = F | L
+type float_literal = { value : Q.t; suffix : float_suffix option }
 
 type invalid =
   | EmptyCharLiteral
@@ -60,7 +62,7 @@ type kind =
   | Identifier of string
   | CharLiteral of string
   | IntLiteral of int_literal
-  | FloatLiteral of float
+  | FloatLiteral of float_literal
   | StringLiteral of string
   (* Operators *)
   | Plus

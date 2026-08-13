@@ -1,4 +1,4 @@
-// #include <h>
+#include abc
 
 int main() {
     char c1 = '\"';
@@ -9,10 +9,15 @@ int main() {
 //
 //     char c3 = '\\
 // d'; int what = 2;
-    int a = 2aabc;
-    int b = 0xabcghi;
-    int c = 0123abckl
-    int x = 2ep;
+    // int a = 2egh;
+    // int b = 0xabcghi;
+    // int c = 0123abckl
+    // int x = 2ep;
+    float y = 0x1.1l
+        ;
+    float x = 0x.p10f;
+    printf("%f", x);
+    // float x = 01e10ghi;
     // printf("%c\n", c1);
     // printf("%c\n", c2);
     // printf("%s\n", s);

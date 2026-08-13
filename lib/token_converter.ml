@@ -15,11 +15,17 @@ type string_error = {
 
 type pp_number_error_proto =
   | InvalidDigit of { digit : char; is_octal : bool; index : int }
-  | InvalidSuffix of { suffix : string; indices : index_span }
+  | InvalidSuffix of { suffix : string; is_float : bool; indices : index_span }
+  | ExponentNoDigits of { index : int }
+  | HexFloatNoExponent of { end_index : int }
+  | HexFloatNoSignificand of { dot_index : int }
 
 type pp_number_error =
   | InvalidDigit of { digit : char; is_octal : bool; loc : Source.loc }
-  | InvalidSuffix of { suffix : string; span : Source.span }
+  | InvalidSuffix of { suffix : string; is_float : bool; span : Source.span }
+  | ExponentNoDigits of { loc : Source.loc }
+  | HexFloatNoExponent of { loc : Source.loc }
+  | HexFloatNoSignificand of { loc : Source.loc }
 
 type conversion_error =
   | StringError of string_error list
@@ -50,11 +56,21 @@ let print_pp_number_error (source : Source.t) (e : pp_number_error) : unit =
         Printf.sprintf "invalid digit '%c' in %s constant" digit type_
       in
       Diagnostics.emit_error (Diagnostics.at source loc msg)
-  | InvalidSuffix { suffix; span } ->
+  | InvalidSuffix { suffix; is_float; span } ->
+      let type_ = if is_float then "floating" else "integer" in
       let msg =
-        Printf.sprintf "invalid suffix '%s' on integer constant" suffix
+        Printf.sprintf "invalid suffix '%s' on %s constant" suffix type_
       in
       Diagnostics.emit_error (Diagnostics.from_span source span msg)
+  | ExponentNoDigits { loc } ->
+      let msg = "exponent has no digits" in
+      Diagnostics.emit_error (Diagnostics.at source loc msg)
+  | HexFloatNoExponent { loc } ->
+      let msg = "hexadecimal floating constant requires an exponent" in
+      Diagnostics.emit_error (Diagnostics.at source loc msg)
+  | HexFloatNoSignificand { loc } ->
+      let msg = "hexadecimal floating constant requires a significand" in
+      Diagnostics.emit_error (Diagnostics.at source loc msg)
 
 let print_conversion_error (source : Source.t) (e : conversion_error) : unit =
   match e with
@@ -84,11 +100,22 @@ let convert_pp_number_error (e : pp_number_error_proto) (source_id : Source.id)
   | InvalidDigit { digit; is_octal; index } ->
       let loc = Source.string_index_to_source_loc source index positions in
       InvalidDigit { digit; is_octal; loc }
-  | InvalidSuffix { suffix; indices = { start; finish } } ->
+  | InvalidSuffix { suffix; is_float; indices = { start; finish } } ->
       let start = Source.string_index_to_source_pos source start positions in
       let finish = Source.string_index_to_source_pos source finish positions in
       let length = finish - start + 1 in
-      InvalidSuffix { suffix; span = { source_id; start; length } }
+      InvalidSuffix { suffix; is_float; span = { source_id; start; length } }
+  | ExponentNoDigits { index } ->
+      let loc = Source.string_index_to_source_loc source index positions in
+      ExponentNoDigits { loc }
+  | HexFloatNoExponent { end_index } ->
+      let loc = Source.string_index_to_source_loc source end_index positions in
+      let loc = { loc with col = loc.col + 1 } in
+      HexFloatNoExponent { loc }
+  | HexFloatNoSignificand { dot_index } ->
+      let loc = Source.string_index_to_source_loc source dot_index positions in
+      let loc = { loc with col = loc.col + 1 } in
+      HexFloatNoSignificand { loc }
 
 let convert_string (s : string) : string * string_error_proto list =
   let len = String.length s in
@@ -268,7 +295,11 @@ let parse_int_helper ~(base : int) ~(is_digit : char -> bool) (s : string)
         Error
           (PPNumberErrorProto
              (InvalidSuffix
-                { suffix; indices = { start = suffix_index; finish = len - 1 } }))
+                {
+                  suffix;
+                  is_float = false;
+                  indices = { start = suffix_index; finish = len - 1 };
+                }))
   end
 
 let parse_int_decimal = parse_int_helper ~base:10 ~is_digit:is_digit_decimal
@@ -284,15 +315,198 @@ let parse_int_literal (s : string) : (Token.int_literal, parse_int_error) result
     end
   else parse_int_decimal s 0
 
+let parse_decimal_float_literal (s : string) :
+    (Token.float_literal, pp_number_error_proto) result =
+  let len = String.length s in
+  let rec skip_number (i : int) (dot_encountered : bool) : int =
+    if i >= len then i
+    else
+      match s.[i] with
+      | '.' when not dot_encountered -> skip_number (i + 1) true
+      | '0' .. '9' -> skip_number (i + 1) dot_encountered
+      | _ -> i
+  in
+
+  let rec skip_digits (i : int) =
+    if i >= len then i
+    else match s.[i] with '0' .. '9' -> skip_digits (i + 1) | _ -> i
+  in
+
+  let skip_exponent (i : int) =
+    if i >= len then i
+    else
+      match s.[i] with
+      | 'e' | 'E' ->
+          if i + 1 >= len then i
+          else
+            begin match s.[i + 1] with
+            | '+' | '-' -> if i + 2 >= len then i else skip_digits i
+            | _ -> skip_digits (i + 1)
+            end
+      | _ -> i
+  in
+
+  let parse_suffix (i : int) :
+      (Token.float_suffix option, pp_number_error_proto) result =
+    if i >= len then Ok None
+    else begin
+      let suffix_str = String.sub s i (len - i) in
+      match suffix_str with
+      | _ when suffix_str.[0] = 'e' || suffix_str.[0] = 'E' ->
+          Error (ExponentNoDigits { index = i })
+      | "f" | "F" -> Ok (Some Token.F)
+      | "l" | "L" -> Ok (Some Token.L)
+      | _ ->
+          Error
+            (InvalidSuffix
+               {
+                 suffix = suffix_str;
+                 is_float = true;
+                 indices = { start = i; finish = len - i };
+               })
+    end
+  in
+
+  let suffix_index = skip_number 0 false in
+  let suffix_index = skip_exponent suffix_index in
+  match parse_suffix suffix_index with
+  | Ok suffix ->
+      let num_str = String.sub s 0 suffix_index in
+      let value = Q.of_string num_str in
+      Ok { value; suffix }
+  | Error err -> Error err
+
+let parse_hex_float_literal (s : string) :
+    (Token.float_literal, pp_number_error_proto) result =
+  let len = String.length s in
+
+  let get_num_str () : (string * int * int, pp_number_error_proto) result =
+    let rec acc_str (i : int) (num_digits_after_dot : int) (buf : Buffer.t)
+        dot_encountered : string * int * int =
+      if i >= len then (Buffer.contents buf, num_digits_after_dot, i)
+      else
+        match s.[i] with
+        | '.' when not dot_encountered ->
+            acc_str (i + 1) num_digits_after_dot buf true
+        | c when is_digit_hex c ->
+            Buffer.add_char buf c;
+            let num_digits_after_dot =
+              if dot_encountered then num_digits_after_dot + 1
+              else num_digits_after_dot
+            in
+            acc_str (i + 1) num_digits_after_dot buf dot_encountered
+        | _ -> (Buffer.contents buf, num_digits_after_dot, i)
+    in
+    let num_str, num_digits_after_dot, suffix_index =
+      acc_str 2 0 (Buffer.create 8) false
+    in
+    if num_str = "" then
+      Error (HexFloatNoSignificand { dot_index = suffix_index - 1 })
+    else Ok (num_str, num_digits_after_dot, suffix_index)
+  in
+
+  let get_exp_str (i : int) :
+      (string * bool * int, pp_number_error_proto) result =
+    let rec acc_digits_str (i : int) (buf : Buffer.t) : string * int =
+      if i >= len then (Buffer.contents buf, i)
+      else
+        match s.[i] with
+        | c when is_digit_hex c ->
+            Buffer.add_char buf c;
+            acc_digits_str (i + 1) buf
+        | _ -> (Buffer.contents buf, i)
+    in
+
+    if i >= len then Error (HexFloatNoExponent { end_index = i - 1 })
+    else
+      match s.[i] with
+      | 'p' | 'P' ->
+          if i + 1 >= len then Error (HexFloatNoExponent { end_index = i - 1 })
+          else
+            begin match s.[i + 1] with
+            | ('+' | '-') as c ->
+                if i + 2 >= len then
+                  Error (HexFloatNoExponent { end_index = i - 1 })
+                else begin
+                  let str, suffix_index =
+                    acc_digits_str (i + 2) (Buffer.create 4)
+                  in
+                  let is_neg = c = '-' in
+                  Ok (str, is_neg, suffix_index)
+                end
+            | _ ->
+                let str, suffix_index =
+                  acc_digits_str (i + 1) (Buffer.create 4)
+                in
+                Ok (str, false, suffix_index)
+            end
+      | _ -> Error (HexFloatNoExponent { end_index = i - 1 })
+  in
+
+  let parse_suffix (i : int) :
+      (Token.float_suffix option, pp_number_error_proto) result =
+    if i >= len then Ok None
+    else begin
+      let suffix_str = String.sub s i (len - i) in
+      match suffix_str with
+      | _ when suffix_str.[0] = 'p' || suffix_str.[0] = 'P' ->
+          Error (ExponentNoDigits { index = i })
+      | "f" | "F" -> Ok (Some Token.F)
+      | "l" | "L" -> Ok (Some Token.L)
+      | _ ->
+          Error
+            (InvalidSuffix
+               {
+                 suffix = suffix_str;
+                 is_float = true;
+                 indices = { start = i; finish = len - i };
+               })
+    end
+  in
+
+  let make_num (num_str : string) (num_digits_after_dot : int)
+      ((exp_str, is_negative) : string * bool) : Q.t =
+    let two_exp : int =
+      let exp_num = int_of_string exp_str in
+      let exp_num = if is_negative then -exp_num else exp_num in
+      (4 * -num_digits_after_dot) + exp_num
+    in
+
+    let num = Z.of_string_base 16 num_str in
+    let num : Q.t = Q.of_bigint num in
+
+    let res =
+      if two_exp > 0 then Q.mul_2exp num two_exp else Q.div_2exp num (-two_exp)
+    in
+    res
+  in
+
+  let ( let* ) = Result.bind in
+  let* num_str, num_digits_after_dot, suffix_index = get_num_str () in
+  let* exp_str, is_negative, suffix_index = get_exp_str suffix_index in
+  let* suffix = parse_suffix suffix_index in
+  let value : Q.t =
+    make_num num_str num_digits_after_dot (exp_str, is_negative)
+  in
+  let res : Token.float_literal = { value; suffix } in
+  Ok res
+
+let parse_float_literal (s : string) :
+    (Token.float_literal, pp_number_error_proto) result =
+  if String.length s >= 2 && s.[0] = '0' && (s.[1] = 'x' || s.[1] = 'X') then
+    parse_hex_float_literal s
+  else parse_decimal_float_literal s
+
 let convert_pp_number (s : string) : (Token.kind, pp_number_error_proto) result
     =
   match parse_int_literal s with
   | Ok literal -> Ok (Token.IntLiteral literal)
   | Error (PPNumberErrorProto err) -> Error err
-  | Error MaybeFloat -> begin
-      prerr_endline "Implement floats";
-      exit 1
-    end
+  | Error MaybeFloat ->
+      begin match parse_float_literal s with
+      | Ok literal -> Ok (Token.FloatLiteral literal)
+      | Error err -> Error err
+      end
 
 let keyword_of_string (s : string) : Token.kind option =
   match s with
