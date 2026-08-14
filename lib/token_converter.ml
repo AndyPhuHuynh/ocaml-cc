@@ -1,4 +1,9 @@
-type invalid_escape_type = SeqNormal | HexNoDigits | HexTooLarge
+type invalid_escape_type =
+  | SeqNormal
+  | OctalTooLarge
+  | HexNoDigits
+  | HexTooLarge
+
 type index_span = { start : int; finish : int }
 
 type string_error_proto = {
@@ -42,6 +47,8 @@ let print_string_error (source : Source.t) (e : string_error) : unit =
     | SeqNormal ->
         ( Diagnostics.emit_warning,
           Printf.sprintf "unknown escape sequence '%s'" e.seq )
+    | OctalTooLarge ->
+        (Diagnostics.emit_error, "octal escape sequence out of range")
     | HexNoDigits ->
         (Diagnostics.emit_error, "\\x used with no following hex digits")
     | HexTooLarge -> (Diagnostics.emit_error, "hex escape sequence out of range")
@@ -133,7 +140,7 @@ let convert_string (s : string) : string * string_error_proto list =
     if i >= len then i
     else
       match s.[i] with
-      | '0' .. '9' | 'a' .. 'z' | 'A' .. 'Z' -> skip_hex_characters (i + 1)
+      | '0' .. '9' | 'a' .. 'f' | 'A' .. 'F' -> skip_hex_characters (i + 1)
       | _ -> i
   in
 
@@ -178,8 +185,22 @@ let convert_string (s : string) : string * string_error_proto list =
               let octal_len = octal_end - octal_start in
               let seq = String.sub s octal_start octal_len in
               let value = Scanf.sscanf seq "%o" Fun.id in
-              Buffer.add_char buf (char_of_int value);
-              helper octal_end errors
+
+              if value > 255 then begin
+                let seq_str = String.sub s octal_start octal_len in
+                Buffer.add_string buf seq_str;
+                helper octal_end
+                  ({
+                     seq_type = OctalTooLarge;
+                     seq = seq_str;
+                     indices = { start = octal_start; finish = octal_end };
+                   }
+                  :: errors)
+              end
+              else begin
+                Buffer.add_char buf (char_of_int value);
+                helper octal_end errors
+              end
           | 'x' ->
               let hex_start = i + 2 in
               let hex_end = skip_hex_characters hex_start in

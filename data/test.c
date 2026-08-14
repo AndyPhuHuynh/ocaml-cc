@@ -13,10 +13,10 @@ int main() {
     // int b = 0xabcghi;
     // int c = 0123abckl
     // int x = 2ep;
-    float y = 0x1.1l
-        ;
-    float x = 0x.p10f;
-    printf("%f", x);
+    // float y = 0x1.1p0;
+    const char *y = "\7777"; 
+    const char *x = "\xghi";
+    // printf("%f", x);
     // float x = 01e10ghi;
     // printf("%c\n", c1);
     // printf("%c\n", c2);

@@ -1,4 +1,8 @@
-type invalid_escape_type = SeqNormal | HexNoDigits | HexTooLarge
+type invalid_escape_type =
+  | SeqNormal
+  | OctalTooLarge
+  | HexNoDigits
+  | HexTooLarge
 
 type string_error = {
   seq_type : invalid_escape_type;
