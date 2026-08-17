@@ -14,8 +14,9 @@ int main() {
     // int c = 0123abckl
     // int x = 2ep;
     // float y = 0x1.1p0;
-    const char *y = "\7777"; 
-    const char *x = "\xghi";
+    // const char *y = "\7777"; 
+    // const char *x = "\xghi";
+    const char *z = A"";
     // printf("%f", x);
     // float x = 01e10ghi;
     // printf("%c\n", c1);

@@ -602,15 +602,14 @@ let convert_token (token : Token.t) (manager : Source.manager) :
             (PPNumberError
                (convert_pp_number_error err source_id source value.positions))
       end
-  | PPString value -> begin
-      begin match convert_string value.string with
+  | PPString { prefix; contents = { string; positions } } -> begin
+      begin match convert_string string with
       | new_str, [] -> Success { token with kind = StringLiteral new_str }
       | new_str, errors ->
           Recovered
             ( { token with kind = StringLiteral new_str },
               StringError
-                (convert_string_errors errors source_id source value.positions)
-            )
+                (convert_string_errors errors source_id source positions) )
       end
     end
   | _ -> Success token

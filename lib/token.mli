@@ -1,7 +1,15 @@
 type header_type = Local | NonLocal
 type header_name = { filepath : string; type_ : header_type }
+
+(**)
+type pp_string_prefix = None | Utf8 | Utf16 | Utf32 | WChar
+type pp_string = { prefix : pp_string_prefix; contents : Source.string_src }
+
+(**)
 type int_suffix = U | L | UL | LL | ULL
 type int_literal = { value : Z.t; suffix : int_suffix option }
+
+(**)
 type float_suffix = F | L
 type float_literal = { value : Q.t; suffix : float_suffix option }
 
@@ -18,7 +26,7 @@ type kind =
   | HeaderName of header_name
   | PPChar of Source.string_src
   | PPNumber of Source.string_src
-  | PPString of Source.string_src
+  | PPString of pp_string
   (* Keywords *)
   | Auto
   | Break

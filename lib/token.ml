@@ -1,7 +1,15 @@
 type header_type = Local | NonLocal
 type header_name = { filepath : string; type_ : header_type }
+
+(**)
+type pp_string_prefix = None | Utf8 | Utf16 | Utf32 | WChar
+type pp_string = { prefix : pp_string_prefix; contents : Source.string_src }
+
+(**)
 type int_suffix = U | L | UL | LL | ULL
 type int_literal = { value : Z.t; suffix : int_suffix option }
+
+(**)
 type float_suffix = F | L
 type float_literal = { value : Q.t; suffix : float_suffix option }
 
@@ -18,7 +26,7 @@ type kind =
   | HeaderName of header_name
   | PPChar of Source.string_src
   | PPNumber of Source.string_src
-  | PPString of Source.string_src
+  | PPString of pp_string
   (* Keywords *)
   | Auto
   | Break
@@ -150,7 +158,8 @@ let pp_kind_name (fmt : Format.formatter) (kind : kind) =
   | HeaderName { filepath; _ } -> Format.fprintf fmt "HeaderName(%S)" filepath
   | PPChar { string; _ } -> Format.fprintf fmt "PPChar(%S)" string
   | PPNumber { string; _ } -> Format.fprintf fmt "PPNumber(%S)" string
-  | PPString { string; _ } -> Format.fprintf fmt "PPString(%S)" string
+  | PPString { contents; _ } ->
+      Format.fprintf fmt "PPString(%S)" contents.string
   (* Keywords *)
   | Auto -> Format.fprintf fmt "Auto"
   | Break -> Format.fprintf fmt "Break"
@@ -260,6 +269,18 @@ let pp_kind_name (fmt : Format.formatter) (kind : kind) =
           Format.fprintf fmt "InvalidCharacter(%S)" (String.make 1 c)
       end
 
+let pp_pp_string_prefix (fmt : Format.formatter) (prefix : pp_string_prefix) :
+    unit =
+  let prefix_str =
+    match prefix with
+    | None -> "None"
+    | Utf8 -> "Utf8"
+    | Utf16 -> "Utf16"
+    | Utf32 -> "Utf32"
+    | WChar -> "Wchar"
+  in
+  Format.fprintf fmt "%-6s" prefix_str
+
 let pp_int_suffix_opt (fmt : Format.formatter) (suffix : int_suffix option) :
     unit =
   let suffix_str =
@@ -280,7 +301,17 @@ let pp_float_suffix_opt (fmt : Format.formatter) (suffix : float_suffix option)
   in
   Format.fprintf fmt "%-5s" suffix_str
 
-let pp_kind_fields (fmt : Format.formatter) (kind : kind) =
+let pp_kind_fields_compact (fmt : Format.formatter) (kind : kind) : unit =
+  match kind with
+  | PPString { prefix } ->
+      Format.fprintf fmt "prefix: %a" pp_pp_string_prefix prefix
+  | IntLiteral { suffix; _ } ->
+      Format.fprintf fmt "suffix: %a" pp_int_suffix_opt suffix
+  | FloatLiteral { suffix; _ } ->
+      Format.fprintf fmt "suffix: %a" pp_float_suffix_opt suffix
+  | _ -> ()
+
+let pp_kind_fields_verbose (fmt : Format.formatter) (kind : kind) =
   let pp_splices_list (fmt : Format.formatter) (slices : Source.string_pos list)
       : unit =
     Format.fprintf fmt "@[<v 2>";
@@ -295,15 +326,9 @@ let pp_kind_fields (fmt : Format.formatter) (kind : kind) =
       Format.fprintf fmt "@,type: %a" pp_header_type type_
   | PPChar value -> pp_splices_list fmt value.positions
   | PPNumber value -> pp_splices_list fmt value.positions
-  | PPString value -> pp_splices_list fmt value.positions
-  | IntLiteral { suffix; _ } ->
-      Format.fprintf fmt "suffix: %a" pp_int_suffix_opt suffix
-  | FloatLiteral { suffix; _ } ->
-      Format.fprintf fmt "suffix: %a" pp_float_suffix_opt suffix
-  | _ -> ()
-
-let pp_kind_fields_compact (fmt : Format.formatter) (kind : kind) : unit =
-  match kind with
+  | PPString value ->
+      Format.fprintf fmt "prefix: %a" pp_pp_string_prefix value.prefix;
+      Format.fprintf fmt "@,%a" pp_splices_list value.contents.positions
   | IntLiteral { suffix; _ } ->
       Format.fprintf fmt "suffix: %a" pp_int_suffix_opt suffix
   | FloatLiteral { suffix; _ } ->
@@ -346,7 +371,7 @@ let pp_verbose (manager : Source.manager) (fmt : Format.formatter) (token : t) :
   Format.fprintf fmt "@,loc: %d:%d" token.loc.line token.loc.col;
 
   if has_fields token.kind then begin
-    Format.fprintf fmt "@,%a" pp_kind_fields token.kind
+    Format.fprintf fmt "@,%a" pp_kind_fields_verbose token.kind
   end;
 
   if should_print_lexeme token.kind then begin

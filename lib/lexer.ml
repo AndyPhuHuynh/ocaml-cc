@@ -434,7 +434,8 @@ let lex_char_literal (lexer : t) : Token.t * t =
 
   helper lexer (sb_create 2)
 
-let lex_string_literal (lexer : t) : Token.t * t =
+let lex_string_literal (lexer : t) (prefix : Token.pp_string_prefix) :
+    Token.t * t =
   let rec helper (lexer : t) (sb : string_builder) : Token.t * t =
     match peek_char_view lexer with
     | None | Some { char = '\n'; _ } -> begin
@@ -443,7 +444,9 @@ let lex_string_literal (lexer : t) : Token.t * t =
       end
     | Some { char = '"'; _ } -> begin
         let lexer = advance_char lexer in
-        make_token (Token.PPString (sb_to_string_src sb)) lexer
+        make_token
+          (Token.PPString { prefix; contents = sb_to_string_src sb })
+          lexer
       end
     | Some ({ char = '\\'; _ } as c) -> begin
         sb_add_char sb c;
@@ -499,10 +502,29 @@ let lex_token lexer =
           | '#' -> lex_hash lexer
           | '.' -> lex_period lexer start_char_view
           (* Literals *)
+          | 'u' ->
+              begin match lex_sequence lexer "8\"" with
+              | Some new_lexer -> lex_string_literal new_lexer Utf8
+              | None ->
+                  begin match lex_sequence lexer "\"" with
+                  | Some new_lexer -> lex_string_literal new_lexer Utf16
+                  | None -> lex_identifier lexer c
+                  end
+              end
+          | 'U' ->
+              begin match lex_sequence lexer "\"" with
+              | Some new_lexer -> lex_string_literal new_lexer Utf32
+              | None -> lex_identifier lexer c
+              end
+          | 'L' ->
+              begin match lex_sequence lexer "\"" with
+              | Some new_lexer -> lex_string_literal new_lexer WChar
+              | None -> lex_identifier lexer c
+              end
           | '_' | 'a' .. 'z' | 'A' .. 'Z' -> lex_identifier lexer c
           | '0' .. '9' -> lex_pp_number lexer start_char_view
           | '\'' -> lex_char_literal lexer
-          | '"' -> lex_string_literal lexer
+          | '"' -> lex_string_literal lexer None
           | _ -> make_token (Token.Invalid (Token.InvalidChar c)) lexer
           end
       end

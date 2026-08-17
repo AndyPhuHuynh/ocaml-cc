@@ -11,6 +11,9 @@ let print_result ?(verbose : bool = false) (result : inspect_result) : unit =
       let formatter =
         if verbose then Token.pp_list_verbose else Token.pp_list_compact
       in
+      let tokens =
+        List.filter (fun (tok : Token.t) -> tok.kind <> NewLine) tokens
+      in
       Format.printf "@[<v>%a@]@.@." (formatter manager) tokens
   | Error err -> print_source_error err
 
