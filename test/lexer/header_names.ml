@@ -9,13 +9,13 @@ let%expect_test "after include" =
       loc: 2:1
       lexeme: "#"
 
-    Identifier("include")
+    Identifier(include)
       loc: 2:2
       lexeme: "include"
 
-    HeaderName("stdio.h")
+    HeaderName(stdio.h)
       loc: 2:10
-      filepath: "stdio.h"
+      filepath: stdio.h
       type: NonLocal
       lexeme: "<stdio.h>"
 
@@ -23,13 +23,13 @@ let%expect_test "after include" =
       loc: 3:1
       lexeme: "#"
 
-    Identifier("include")
+    Identifier(include)
       loc: 3:2
       lexeme: "include"
 
-    HeaderName("stdlib.h")
+    HeaderName(stdlib.h)
       loc: 3:10
-      filepath: "stdlib.h"
+      filepath: stdlib.h
       type: Local
       lexeme: "\"stdlib.h\""
 
@@ -46,9 +46,9 @@ let%expect_test "not after include" =
   [%expect
     {|
     2:1   Less                    lexeme="<"
-    2:2   Identifier("stdio")     lexeme="stdio"
+    2:2   Identifier(stdio)       lexeme="stdio"
     2:7   Period                  lexeme="."
-    2:8   Identifier("h")         lexeme="h"
+    2:8   Identifier(h)           lexeme="h"
     2:9   Greater                 lexeme=">"
     3:1   PPString("stdlib.h")    prefix: None  lexeme="\"stdlib.h\""
     3:11  Eof                     lexeme="\n"

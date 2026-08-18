@@ -5,6 +5,7 @@ description: "An educational C Compiler written in OCaml"
 depends: [
   "ocaml"
   "dune" {>= "3.24"}
+  "uucp"
   "zarith"
   "ppx_expect" {with-test}
   "odoc" {with-doc}

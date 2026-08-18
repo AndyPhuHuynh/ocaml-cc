@@ -1,8 +1,11 @@
+type invalid_ucn = NoDigits | Incomplete | InvalidCodePoint of string
+
 type invalid_escape_type =
   | SeqNormal
   | OctalTooLarge
   | HexNoDigits
   | HexTooLarge
+  | Ucn of invalid_ucn
 
 type index_span = { start : int; finish : int }
 
@@ -52,6 +55,19 @@ let print_string_error (source : Source.t) (e : string_error) : unit =
     | HexNoDigits ->
         (Diagnostics.emit_error, "\\x used with no following hex digits")
     | HexTooLarge -> (Diagnostics.emit_error, "hex escape sequence out of range")
+    | Ucn err ->
+        begin match err with
+        | NoDigits ->
+            (Diagnostics.emit_error, "\\u used with no following hex digits")
+        | Incomplete ->
+            (Diagnostics.emit_error, "incomplete universal character name")
+        | InvalidCodePoint str ->
+            ( Diagnostics.emit_error,
+              Printf.sprintf
+                "character <%s> cannot be specified by a universal character \
+                 name"
+                str )
+        end
   in
   emit_fn (Diagnostics.from_span source e.span msg)
 
@@ -123,6 +139,44 @@ let convert_pp_number_error (e : pp_number_error_proto) (source_id : Source.id)
       let loc = Source.string_index_to_source_loc source dot_index positions in
       let loc = { loc with col = loc.col + 1 } in
       HexFloatNoSignificand { loc }
+
+let parse_ucn (s : string) (i : int) (is_eight_digits : bool) :
+    (Uchar.t, invalid_ucn) result * int =
+  let len = String.length s in
+
+  let check_hex (i : int) : bool * int =
+    let rec helper (max_depth : int) (i : int) (depth : int) : bool * int =
+      if depth >= max_depth then (true, i)
+      else if i >= len then (false, i)
+      else
+        begin match s.[i] with
+        | '0' .. '9' | 'a' .. 'f' | 'A' .. 'F' ->
+            helper max_depth (i + 1) (depth + 1)
+        | _ -> (false, i)
+        end
+    in
+
+    let max_depth = if is_eight_digits then 8 else 4 in
+    helper max_depth i 0
+  in
+
+  let parse_cp (start : int) (finish : int) : (Uchar.t, invalid_ucn) result =
+    let cp_str = String.sub s start (finish - start) in
+    let cp_num = Scanf.sscanf cp_str "%x" Fun.id in
+    if not (Uchar.is_valid cp_num) then
+      Error (InvalidCodePoint (Printf.sprintf "U+%s" cp_str))
+    else begin
+      let uchar = Uchar.of_int cp_num in
+      if Unicode.ucn_continue_allowed uchar then Ok uchar
+      else Error (InvalidCodePoint (Printf.sprintf "U+%s" cp_str))
+    end
+  in
+
+  match check_hex i with
+  | false, new_index ->
+      if new_index = i then (Error NoDigits, new_index)
+      else (Error Incomplete, new_index)
+  | true, new_index -> (parse_cp i new_index, new_index)
 
 let convert_string (s : string) : string * string_error_proto list =
   let len = String.length s in
@@ -230,6 +284,21 @@ let convert_string (s : string) : string * string_error_proto list =
                 let value = Scanf.sscanf seq "%x" Fun.id in
                 Buffer.add_char buf (char_of_int value);
                 helper hex_end errors
+              end
+          | 'u' | 'U' ->
+              let is_eight_digits = c = 'U' in
+              begin match parse_ucn s (i + 2) is_eight_digits with
+              | Error err, new_index ->
+                  helper new_index
+                    ({
+                       seq_type = Ucn err;
+                       seq = "\\u";
+                       indices = { start = i; finish = new_index - 1 };
+                     }
+                    :: errors)
+              | Ok uchar, new_index ->
+                  Buffer.add_utf_8_uchar buf uchar;
+                  helper new_index errors
               end
           | c ->
               Buffer.add_char buf c;

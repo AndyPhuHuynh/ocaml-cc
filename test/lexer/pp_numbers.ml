@@ -5,19 +5,19 @@ let%expect_test "digits" =
 |};
   [%expect
     {|
-    2:1   PPNumber("0")           lexeme="0"
-    2:3   PPNumber("1")           lexeme="1"
-    2:5   PPNumber("2")           lexeme="2"
-    2:7   PPNumber("3")           lexeme="3"
-    2:9   PPNumber("4")           lexeme="4"
-    2:11  PPNumber("5")           lexeme="5"
-    2:13  PPNumber("6")           lexeme="6"
-    2:15  PPNumber("7")           lexeme="7"
-    2:17  PPNumber("8")           lexeme="8"
-    2:19  PPNumber("9")           lexeme="9"
-    3:1   PPNumber("123")         lexeme="123"
-    3:5   PPNumber("456")         lexeme="456"
-    3:9   PPNumber("789")         lexeme="789"
+    2:1   PPNumber(0)             lexeme="0"
+    2:3   PPNumber(1)             lexeme="1"
+    2:5   PPNumber(2)             lexeme="2"
+    2:7   PPNumber(3)             lexeme="3"
+    2:9   PPNumber(4)             lexeme="4"
+    2:11  PPNumber(5)             lexeme="5"
+    2:13  PPNumber(6)             lexeme="6"
+    2:15  PPNumber(7)             lexeme="7"
+    2:17  PPNumber(8)             lexeme="8"
+    2:19  PPNumber(9)             lexeme="9"
+    3:1   PPNumber(123)           lexeme="123"
+    3:5   PPNumber(456)           lexeme="456"
+    3:9   PPNumber(789)           lexeme="789"
     3:12  Eof                     lexeme="\n"
     |}]
 
@@ -28,12 +28,12 @@ let%expect_test "with dot" =
 |};
   [%expect
     {|
-    2:1   PPNumber(".123")        lexeme=".123"
-    2:6   PPNumber(".456")        lexeme=".456"
-    2:11  PPNumber(".678")        lexeme=".678"
-    3:1   PPNumber("123.")        lexeme="123."
-    3:6   PPNumber("456.")        lexeme="456."
-    3:11  PPNumber("789.")        lexeme="789."
+    2:1   PPNumber(.123)          lexeme=".123"
+    2:6   PPNumber(.456)          lexeme=".456"
+    2:11  PPNumber(.678)          lexeme=".678"
+    3:1   PPNumber(123.)          lexeme="123."
+    3:6   PPNumber(456.)          lexeme="456."
+    3:11  PPNumber(789.)          lexeme="789."
     3:15  Eof                     lexeme="\n"
     |}]
 
@@ -44,10 +44,10 @@ let%expect_test "exponent sign" =
 |};
   [%expect
     {|
-    2:1   PPNumber("123e+1")      lexeme="123e+1"
-    2:8   PPNumber("456E-2")      lexeme="456E-2"
-    3:1   PPNumber("123p+1")      lexeme="123p+1"
-    3:8   PPNumber("456P-2")      lexeme="456P-2"
+    2:1   PPNumber(123e+1)        lexeme="123e+1"
+    2:8   PPNumber(456E-2)        lexeme="456E-2"
+    3:1   PPNumber(123p+1)        lexeme="123p+1"
+    3:8   PPNumber(456P-2)        lexeme="456P-2"
     3:14  Eof                     lexeme="\n"
     |}]
 
@@ -57,9 +57,9 @@ let%expect_test "suffix" =
 |};
   [%expect
     {|
-    2:1   PPNumber("123abc")      lexeme="123abc"
-    2:8   PPNumber("567.def")     lexeme="567.def"
-    2:16  PPNumber("789e+10ghi")  lexeme="789e+10ghi"
+    2:1   PPNumber(123abc)        lexeme="123abc"
+    2:8   PPNumber(567.def)       lexeme="567.def"
+    2:16  PPNumber(789e+10ghi)    lexeme="789e+10ghi"
     2:26  Eof                     lexeme="\n"
     |}]
 
@@ -72,19 +72,19 @@ a1
 |};
   [%expect
     {|
-    2:1   PPNumber("123")         lexeme="123"
+    2:1   PPNumber(123)           lexeme="123"
     2:4   Plus                    lexeme="+"
-    2:5   PPNumber("1")           lexeme="1"
-    2:7   PPNumber("456")         lexeme="456"
+    2:5   PPNumber(1)             lexeme="1"
+    2:7   PPNumber(456)           lexeme="456"
     2:10  Minus                   lexeme="-"
-    2:11  PPNumber("2")           lexeme="2"
+    2:11  PPNumber(2)             lexeme="2"
     3:1   Plus                    lexeme="+"
-    3:2   PPNumber("1")           lexeme="1"
+    3:2   PPNumber(1)             lexeme="1"
     3:7   Minus                   lexeme="-"
-    3:8   PPNumber("2")           lexeme="2"
+    3:8   PPNumber(2)             lexeme="2"
     4:1   Period                  lexeme="."
-    4:2   Identifier("foo")       lexeme="foo"
+    4:2   Identifier(foo)         lexeme="foo"
     4:7   Period                  lexeme="."
-    5:1   Identifier("a1")        lexeme="a1"
+    5:1   Identifier(a1)          lexeme="a1"
     5:3   Eof                     lexeme="\n"
     |}]

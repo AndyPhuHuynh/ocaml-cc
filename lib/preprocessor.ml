@@ -147,7 +147,8 @@ let process_directive_include (pp : t) (include_location : Source.loc) : t =
             1
     end
   | _ -> begin
-      Format.printf "Expect header name, got: %a\n" Token.pp_kind_name
+      Format.printf "Expect header name, got: %a\n"
+        (Token.pp_kind_name ~escaped:false)
         token.kind;
       exit 1
     end

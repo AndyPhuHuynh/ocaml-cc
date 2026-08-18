@@ -5,11 +5,13 @@ let print_source_error (err : Source.load_error) : unit =
   | Source.FileNotFound filepath -> Printf.eprintf "File not found: %s" filepath
   | Source.IOError msg -> Printf.eprintf "IOError: %s" msg
 
-let print_result ?(verbose : bool = false) (result : inspect_result) : unit =
+let print_result ?(escaped : bool = true) ?(verbose : bool = false)
+    (result : inspect_result) : unit =
   match result with
   | Ok (tokens, manager) ->
       let formatter =
-        if verbose then Token.pp_list_verbose else Token.pp_list_compact
+        if verbose then Token.pp_list_verbose ~escaped
+        else Token.pp_list_compact ~escaped
       in
       let tokens =
         List.filter (fun (tok : Token.t) -> tok.kind <> NewLine) tokens

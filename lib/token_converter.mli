@@ -1,8 +1,11 @@
+type invalid_ucn = NoDigits | Incomplete | InvalidCodePoint of string
+
 type invalid_escape_type =
   | SeqNormal
   | OctalTooLarge
   | HexNoDigits
   | HexTooLarge
+  | Ucn of invalid_ucn
 
 type string_error = {
   seq_type : invalid_escape_type;

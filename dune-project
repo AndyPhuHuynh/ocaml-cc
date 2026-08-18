@@ -11,6 +11,7 @@
  (depends 
    ocaml
    dune
+   uucp
    zarith
    (ppx_expect :with-test)))
 

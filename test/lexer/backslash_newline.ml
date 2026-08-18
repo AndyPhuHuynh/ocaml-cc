@@ -25,21 +25,21 @@ b"
       loc: 2:1
       lexeme: "#"
 
-    Identifier("include")
+    Identifier(include)
       loc: 2:2
       lexeme: "include"
 
-    HeaderName("myheader")
+    HeaderName(myheader)
       loc: 2:10
-      filepath: "myheader"
+      filepath: myheader
       type: NonLocal
       lexeme: "<my\\\nheader>"
 
-    Identifier("identifier")
+    Identifier(identifier)
       loc: 5:1
       lexeme: "ident\\\nifier"
 
-    PPNumber("123.456")
+    PPNumber(123.456)
       loc: 8:1
       splices:
         { i:    0; loc:   8:1   }

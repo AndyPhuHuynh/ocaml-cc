@@ -134,6 +134,14 @@ type t = {
   is_at_line_start : bool;
 }
 
+let pp_string ~(escaped : bool) (fmt : Format.formatter) (s : string) : unit =
+  if escaped then Format.fprintf fmt "%S" s else Format.fprintf fmt "%s" s
+
+let pp_string_len ~(escaped : bool) ~(padding : int) (fmt : Format.formatter)
+    (s : string) : unit =
+  if escaped then Format.fprintf fmt "%-*S" padding s
+  else Format.fprintf fmt "%-*s" padding s
+
 let pp_header_type (fmt : Format.formatter) (type_ : header_type) =
   let str = match type_ with Local -> "Local" | NonLocal -> "NonLocal" in
   Format.fprintf fmt "%s" str
@@ -152,14 +160,16 @@ let display_source_positions (s : Source.string_pos list) : string =
 
   helper s ""
 
-let pp_kind_name (fmt : Format.formatter) (kind : kind) =
+let pp_kind_name ?(escaped : bool = true) (fmt : Format.formatter) (kind : kind)
+    =
   match kind with
   (* Preprocessor *)
-  | HeaderName { filepath; _ } -> Format.fprintf fmt "HeaderName(%S)" filepath
-  | PPChar { string; _ } -> Format.fprintf fmt "PPChar(%S)" string
-  | PPNumber { string; _ } -> Format.fprintf fmt "PPNumber(%S)" string
+  | HeaderName { filepath; _ } -> Format.fprintf fmt "HeaderName(%s)" filepath
+  | PPNumber { string; _ } -> Format.fprintf fmt "PPNumber(%s)" string
+  | PPChar { string; _ } ->
+      Format.fprintf fmt "PPChar(%a)" (pp_string ~escaped) string
   | PPString { contents; _ } ->
-      Format.fprintf fmt "PPString(%S)" contents.string
+      Format.fprintf fmt "PPString(%a)" (pp_string ~escaped) contents.string
   (* Keywords *)
   | Auto -> Format.fprintf fmt "Auto"
   | Break -> Format.fprintf fmt "Break"
@@ -200,11 +210,13 @@ let pp_kind_name (fmt : Format.formatter) (kind : kind) =
   | Complex -> Format.fprintf fmt "_Complex"
   | Imaginary -> Format.fprintf fmt "_Imaginary"
   (* Identifiers and literals *)
-  | Identifier str -> Format.fprintf fmt "Identifier(%S)" str
-  | CharLiteral str -> Format.fprintf fmt "CharLiteral(%S)" str
+  | Identifier str -> Format.fprintf fmt "Identifier(%s)" str
   | IntLiteral i -> Format.fprintf fmt "IntLiteral(%a)" Z.pp_print i.value
   | FloatLiteral f -> Format.fprintf fmt "FloatLiteral(%a)" Q.pp_print f.value
-  | StringLiteral str -> Format.fprintf fmt "StringLiteral(%S)" str
+  | CharLiteral str ->
+      Format.fprintf fmt "CharLiteral(%a)" (pp_string ~escaped) str
+  | StringLiteral str ->
+      Format.fprintf fmt "StringLiteral(%a)" (pp_string ~escaped) str
   (* Operators *)
   | Plus -> Format.fprintf fmt "Plus"
   | PlusEqual -> Format.fprintf fmt "PlusEqual"
@@ -322,7 +334,7 @@ let pp_kind_fields_verbose (fmt : Format.formatter) (kind : kind) =
 
   match kind with
   | HeaderName { filepath; type_ } ->
-      Format.fprintf fmt "filepath: %S" filepath;
+      Format.fprintf fmt "filepath: %s" filepath;
       Format.fprintf fmt "@,type: %a" pp_header_type type_
   | PPChar value -> pp_splices_list fmt value.positions
   | PPNumber value -> pp_splices_list fmt value.positions
@@ -350,9 +362,9 @@ let should_print_lexeme (kind : kind) : bool =
       false
   | _ -> true
 
-let pp_compact (manager : Source.manager) (fmt : Format.formatter) (token : t) :
-    unit =
-  let kind_str = Format.asprintf "%a" pp_kind_name token.kind in
+let pp_compact ?(escaped : bool = true) (manager : Source.manager)
+    (fmt : Format.formatter) (token : t) : unit =
+  let kind_str = Format.asprintf "%a" (pp_kind_name ~escaped) token.kind in
   Format.fprintf fmt "%2d:%-3d %-22s  " token.loc.line token.loc.col kind_str;
 
   if has_fields token.kind then begin
@@ -360,14 +372,16 @@ let pp_compact (manager : Source.manager) (fmt : Format.formatter) (token : t) :
   end;
 
   if should_print_lexeme token.kind then begin
-    Format.fprintf fmt "lexeme=%-20S" (Source.span_to_string token.span manager)
+    Format.fprintf fmt "lexeme=%a"
+      (pp_string_len ~escaped ~padding:20)
+      (Source.span_to_string token.span manager)
   end
 
-let pp_verbose (manager : Source.manager) (fmt : Format.formatter) (token : t) :
-    unit =
+let pp_verbose ?(escaped : bool = true) (manager : Source.manager)
+    (fmt : Format.formatter) (token : t) : unit =
   Format.fprintf fmt "@[<v 2>";
 
-  Format.fprintf fmt "%a" pp_kind_name token.kind;
+  Format.fprintf fmt "%a" (pp_kind_name ~escaped) token.kind;
   Format.fprintf fmt "@,loc: %d:%d" token.loc.line token.loc.col;
 
   if has_fields token.kind then begin
@@ -375,19 +389,23 @@ let pp_verbose (manager : Source.manager) (fmt : Format.formatter) (token : t) :
   end;
 
   if should_print_lexeme token.kind then begin
-    Format.fprintf fmt "@,lexeme: %S" (Source.span_to_string token.span manager)
+    Format.fprintf fmt "@,lexeme: %a"
+      (pp_string_len ~escaped ~padding:20)
+      (Source.span_to_string token.span manager)
   end;
 
   Format.fprintf fmt "@]"
 
-let pp_list_verbose (manager : Source.manager) (fmt : Format.formatter)
-    (tokens : t list) : unit =
+let pp_list_verbose ?(escaped : bool = true) (manager : Source.manager)
+    (fmt : Format.formatter) (tokens : t list) : unit =
   Format.pp_print_list
     ~pp_sep:(fun fmt () -> Format.fprintf fmt "@,@,")
-    (pp_verbose manager) fmt tokens
+    (pp_verbose ~escaped manager)
+    fmt tokens
 
-let pp_list_compact (manager : Source.manager) (fmt : Format.formatter)
-    (tokens : t list) : unit =
+let pp_list_compact ?(escaped : bool = true) (manager : Source.manager)
+    (fmt : Format.formatter) (tokens : t list) : unit =
   Format.pp_print_list
     ~pp_sep:(fun fmt () -> Format.fprintf fmt "@,")
-    (pp_compact manager) fmt tokens
+    (pp_compact ~escaped manager)
+    fmt tokens

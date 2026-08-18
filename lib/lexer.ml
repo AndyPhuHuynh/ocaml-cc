@@ -46,6 +46,10 @@ let at_index (lexer : t) : char option =
   if is_at_end lexer then None
   else Some lexer.source.contents.[lexer.position.index]
 
+(* let at_index_utf8 (lexer : t) : Uchar.t option = *)
+(*   if is_at_end lexer then None *)
+(*   else Some lexer.source.contents.[lexer.position.index] *)
+
 let advance_index (lexer : t) : t =
   match at_index lexer with
   | None -> lexer
@@ -360,6 +364,16 @@ let lex_pp_number (lexer : t) (start_char : char_view) : Token.t * t =
       when is_identifier_non_digit c.char || is_digit c.char || c.char == '.' ->
         sb_add_char sb c;
         helper (advance_char lexer) sb
+    | Some c1 when c1.char = '\\' -> begin
+        let next_lexer = advance_char lexer in
+        match peek_char_view next_lexer with
+        | Some c2 when c2.char = 'u' || c2.char = 'U' -> begin
+            sb_add_char sb c1;
+            sb_add_char sb c2;
+            helper (advance_char next_lexer) sb
+          end
+        | _ -> make_token (Token.PPNumber (sb_to_string_src sb)) lexer
+      end
     | _ -> make_token (Token.PPNumber (sb_to_string_src sb)) lexer
   in
 

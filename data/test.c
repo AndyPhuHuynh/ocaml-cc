@@ -1,4 +1,4 @@
-#include abc
+#include <stdio.h>
 
 int main() {
     char c1 = '\"';
@@ -16,7 +16,8 @@ int main() {
     // float y = 0x1.1p0;
     // const char *y = "\7777"; 
     // const char *x = "\xghi";
-    const char *z = A"";
+    // const char *z = "\u";
+    int x = 123\u0;
     // printf("%f", x);
     // float x = 01e10ghi;
     // printf("%c\n", c1);
