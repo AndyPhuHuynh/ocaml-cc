@@ -48,6 +48,7 @@ b"
 
     PPChar("ab")
       loc: 11:1
+      prefix: None
       splices:
         { i:    0; loc:  11:2   }
         { i:    1; loc:  12:1   }

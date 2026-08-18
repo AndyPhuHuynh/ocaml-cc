@@ -2,6 +2,10 @@ type header_type = Local | NonLocal
 type header_name = { filepath : string; type_ : header_type }
 
 (**)
+type pp_char_prefix = None | Utf16 | Utf32 | WChar
+type pp_char = { prefix : pp_char_prefix; contents : Source.string_src }
+
+(**)
 type pp_string_prefix = None | Utf8 | Utf16 | Utf32 | WChar
 type pp_string = { prefix : pp_string_prefix; contents : Source.string_src }
 
@@ -26,7 +30,7 @@ type kind =
   | HeaderName of header_name
   | PPIdentifier of Source.string_src
   | PPNumber of Source.string_src
-  | PPChar of Source.string_src
+  | PPChar of pp_char
   | PPString of pp_string
   (* Keywords *)
   | Auto

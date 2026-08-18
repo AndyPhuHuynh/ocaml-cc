@@ -422,7 +422,7 @@ let lex_identifier (lexer : t) : Token.t * t =
 
   helper lexer (sb_create 16)
 
-let lex_char_literal (lexer : t) : Token.t * t =
+let lex_char_literal (lexer : t) (prefix : Token.pp_char_prefix) : Token.t * t =
   let rec helper (lexer : t) (sb : string_builder) : Token.t * t =
     match peek_char_view lexer with
     | Some { char = '\''; _ } -> begin
@@ -430,7 +430,7 @@ let lex_char_literal (lexer : t) : Token.t * t =
         let kind =
           if Buffer.length sb.buffer = 0 then
             Token.Invalid Token.EmptyCharLiteral
-          else Token.PPChar (sb_to_string_src sb)
+          else Token.PPChar { prefix; contents = sb_to_string_src sb }
         in
         make_token kind lexer
       end
@@ -528,20 +528,23 @@ let lex_token lexer =
               begin match lex_sequence lexer "8\"" with
               | Some new_lexer -> lex_string_literal new_lexer Utf8
               | None ->
-                  begin match lex_sequence lexer "\"" with
-                  | Some new_lexer -> lex_string_literal new_lexer Utf16
-                  | None -> lex_identifier prev_lexer
+                  begin match peek_char lexer with
+                  | Some '\'' -> lex_char_literal (advance_char lexer) Utf16
+                  | Some '\"' -> lex_string_literal (advance_char lexer) Utf16
+                  | _ -> lex_identifier prev_lexer
                   end
               end
           | 'U' ->
-              begin match lex_sequence lexer "\"" with
-              | Some new_lexer -> lex_string_literal new_lexer Utf32
-              | None -> lex_identifier prev_lexer
+              begin match peek_char lexer with
+              | Some '\'' -> lex_char_literal (advance_char lexer) Utf32
+              | Some '\"' -> lex_string_literal (advance_char lexer) Utf32
+              | _ -> lex_identifier prev_lexer
               end
           | 'L' ->
-              begin match lex_sequence lexer "\"" with
-              | Some new_lexer -> lex_string_literal new_lexer WChar
-              | None -> lex_identifier prev_lexer
+              begin match peek_char lexer with
+              | Some '\'' -> lex_char_literal (advance_char lexer) WChar
+              | Some '\"' -> lex_string_literal (advance_char lexer) WChar
+              | _ -> lex_identifier prev_lexer
               end
           | '\\' ->
               begin match peek_char lexer with
@@ -550,7 +553,7 @@ let lex_token lexer =
               end
           | '_' | 'a' .. 'z' | 'A' .. 'Z' -> lex_identifier prev_lexer
           | '0' .. '9' -> lex_pp_number lexer start_char_view
-          | '\'' -> lex_char_literal lexer
+          | '\'' -> lex_char_literal lexer None
           | '"' -> lex_string_literal lexer None
           | _ -> make_token (Token.Invalid (Token.InvalidChar c)) lexer
           end

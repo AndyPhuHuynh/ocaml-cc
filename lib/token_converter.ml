@@ -739,17 +739,6 @@ let convert_token (token : Token.t) (manager : Source.manager) :
                (convert_identifier_errors errors source_id source
                   value.positions))
       end
-  | PPChar value -> begin
-      begin match convert_string value.string with
-      | new_str, [] -> Success { token with kind = CharLiteral new_str }
-      | new_str, errors ->
-          Recovered
-            ( { token with kind = CharLiteral new_str },
-              StringError
-                (convert_string_errors errors source_id source value.positions)
-            )
-      end
-    end
   | PPNumber value ->
       begin match convert_pp_number value.string with
       | Ok kind -> Success { token with kind }
@@ -758,6 +747,16 @@ let convert_token (token : Token.t) (manager : Source.manager) :
             (PPNumberError
                (convert_pp_number_error err source_id source value.positions))
       end
+  | PPChar { prefix; contents = { string; positions } } -> begin
+      begin match convert_string string with
+      | new_str, [] -> Success { token with kind = CharLiteral new_str }
+      | new_str, errors ->
+          Recovered
+            ( { token with kind = CharLiteral new_str },
+              StringError
+                (convert_string_errors errors source_id source positions) )
+      end
+    end
   | PPString { prefix; contents = { string; positions } } -> begin
       begin match convert_string string with
       | new_str, [] -> Success { token with kind = StringLiteral new_str }

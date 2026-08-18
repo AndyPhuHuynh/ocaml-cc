@@ -7,14 +7,14 @@ let%expect_test "ordinary char literal" =
 |};
   [%expect
     {|
-    2:1   PPChar("A")             lexeme="'A'"
-    2:5   PPChar("Z")             lexeme="'Z'"
-    3:1   PPChar("a")             lexeme="'a'"
-    3:5   PPChar("z")             lexeme="'z'"
-    4:1   PPChar("1")             lexeme="'1'"
-    4:5   PPChar("9")             lexeme="'9'"
-    5:1   PPChar("_")             lexeme="'_'"
-    5:5   PPChar("!")             lexeme="'!'"
+    2:1   PPChar("A")             prefix: None  lexeme="'A'"
+    2:5   PPChar("Z")             prefix: None  lexeme="'Z'"
+    3:1   PPChar("a")             prefix: None  lexeme="'a'"
+    3:5   PPChar("z")             prefix: None  lexeme="'z'"
+    4:1   PPChar("1")             prefix: None  lexeme="'1'"
+    4:5   PPChar("9")             prefix: None  lexeme="'9'"
+    5:1   PPChar("_")             prefix: None  lexeme="'_'"
+    5:5   PPChar("!")             prefix: None  lexeme="'!'"
     5:8   Eof                     lexeme="\n"
     |}]
 
@@ -27,18 +27,18 @@ let%expect_test "escape sequences" =
 |};
   [%expect
     {|
-    2:1   PPChar("\\a")           lexeme="'\\a'"
-    2:6   PPChar("\\b")           lexeme="'\\b'"
-    2:11  PPChar("\\e")           lexeme="'\\e'"
-    2:16  PPChar("\\f")           lexeme="'\\f'"
-    3:1   PPChar("\\n")           lexeme="'\\n'"
-    3:6   PPChar("\\r")           lexeme="'\\r'"
-    3:11  PPChar("\\t")           lexeme="'\\t'"
-    3:16  PPChar("\\v")           lexeme="'\\v'"
-    4:1   PPChar("\\'")           lexeme="'\\''"
-    4:6   PPChar("\\\"")          lexeme="'\\\"'"
-    4:11  PPChar("\\?")           lexeme="'\\?'"
-    4:16  PPChar("\\\\")          lexeme="'\\\\'"
+    2:1   PPChar("\\a")           prefix: None  lexeme="'\\a'"
+    2:6   PPChar("\\b")           prefix: None  lexeme="'\\b'"
+    2:11  PPChar("\\e")           prefix: None  lexeme="'\\e'"
+    2:16  PPChar("\\f")           prefix: None  lexeme="'\\f'"
+    3:1   PPChar("\\n")           prefix: None  lexeme="'\\n'"
+    3:6   PPChar("\\r")           prefix: None  lexeme="'\\r'"
+    3:11  PPChar("\\t")           prefix: None  lexeme="'\\t'"
+    3:16  PPChar("\\v")           prefix: None  lexeme="'\\v'"
+    4:1   PPChar("\\'")           prefix: None  lexeme="'\\''"
+    4:6   PPChar("\\\"")          prefix: None  lexeme="'\\\"'"
+    4:11  PPChar("\\?")           prefix: None  lexeme="'\\?'"
+    4:16  PPChar("\\\\")          prefix: None  lexeme="'\\\\'"
     4:20  Eof                     lexeme="\n"
     |}]
 
@@ -48,10 +48,10 @@ let%expect_test "octal sequences" =
 |};
   [%expect
     {|
-    2:1   PPChar("\\0")           lexeme="'\\0'"
-    2:6   PPChar("\\7")           lexeme="'\\7'"
-    2:11  PPChar("\\123")         lexeme="'\\123'"
-    2:18  PPChar("\\777")         lexeme="'\\777'"
+    2:1   PPChar("\\0")           prefix: None  lexeme="'\\0'"
+    2:6   PPChar("\\7")           prefix: None  lexeme="'\\7'"
+    2:11  PPChar("\\123")         prefix: None  lexeme="'\\123'"
+    2:18  PPChar("\\777")         prefix: None  lexeme="'\\777'"
     2:24  Eof                     lexeme="\n"
     |}]
 
@@ -61,10 +61,10 @@ let%expect_test "hex sequences" =
 |};
   [%expect
     {|
-    2:1   PPChar("\\x00")         lexeme="'\\x00'"
-    2:8   PPChar("\\x1b")         lexeme="'\\x1b'"
-    2:15  PPChar("\\x41")         lexeme="'\\x41'"
-    2:22  PPChar("\\xff")         lexeme="'\\xff'"
+    2:1   PPChar("\\x00")         prefix: None  lexeme="'\\x00'"
+    2:8   PPChar("\\x1b")         prefix: None  lexeme="'\\x1b'"
+    2:15  PPChar("\\x41")         prefix: None  lexeme="'\\x41'"
+    2:22  PPChar("\\xff")         prefix: None  lexeme="'\\xff'"
     2:28  Eof                     lexeme="\n"
     |}]
 
@@ -74,10 +74,10 @@ let%expect_test "multichar" =
 |};
   [%expect
     {|
-    2:1   PPChar("abc")           lexeme="'abc'"
-    2:7   PPChar("def")           lexeme="'def'"
-    2:13  PPChar("ghi")           lexeme="'ghi'"
-    2:19  PPChar("   ")           lexeme="'   '"
+    2:1   PPChar("abc")           prefix: None  lexeme="'abc'"
+    2:7   PPChar("def")           prefix: None  lexeme="'def'"
+    2:13  PPChar("ghi")           prefix: None  lexeme="'ghi'"
+    2:19  PPChar("   ")           prefix: None  lexeme="'   '"
     2:24  Eof                     lexeme="\n"
     |}]
 
@@ -104,6 +104,7 @@ d'
     {|
     PPChar("abcd")
       loc: 2:1
+      prefix: None
       splices:
         { i:    0; loc:   2:2   }
         { i:    1; loc:   3:1   }
@@ -124,4 +125,20 @@ d'
     [1mlex_test:4:2[0m: [1;35mwarning[0m: [1mbackslash and newline separated by whitespace[0m
         4 | c\
           |  [1;32m^[0m
+    |}]
+
+let%expect_test "char literal prefixes" =
+  Test.test_lexer
+    {|
+'No prefix'
+u'Utf16 prefix'
+U'Utf32 prefix'
+L'Wchar prefix'
+|};
+  [%expect {|
+    2:1   PPChar("No prefix")     prefix: None  lexeme="'No prefix'"
+    3:1   PPChar("Utf16 prefix")  prefix: Utf16 lexeme="u'Utf16 prefix'"
+    4:1   PPChar("Utf32 prefix")  prefix: Utf32 lexeme="U'Utf32 prefix'"
+    5:1   PPChar("Wchar prefix")  prefix: Wchar lexeme="L'Wchar prefix'"
+    5:16  Eof                     lexeme="\n"
     |}]
