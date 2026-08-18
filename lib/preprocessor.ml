@@ -166,7 +166,7 @@ let rec process_directive_invalid (pp : t) : t =
 let process_directive (pp : t) (hash_location : Source.loc) : t =
   let directive, lexer = lex_current pp in
   match directive.kind with
-  | Identifier "include" ->
+  | PPIdentifier { string = "include" } ->
       process_directive_include (update_lexer pp lexer) hash_location
   | NewLine -> update_lexer pp lexer
   | _ -> process_directive_invalid pp

@@ -23,7 +23,7 @@ let lex_all (load_file : Source.load_file) : inspect_result =
   let rec helper (lexer : Lexer.t) (acc : Token.t list) =
     let tok, lexer =
       match acc with
-      | { kind = Token.Identifier "include"; _ }
+      | { kind = Token.PPIdentifier { string = "include" }; _ }
         :: { kind = Token.Hash; _ }
         :: _ ->
           Lexer.lex_header_name lexer

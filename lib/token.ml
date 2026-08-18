@@ -24,8 +24,9 @@ type invalid =
 type kind =
   (* Preprocessing *)
   | HeaderName of header_name
-  | PPChar of Source.string_src
+  | PPIdentifier of Source.string_src
   | PPNumber of Source.string_src
+  | PPChar of Source.string_src
   | PPString of pp_string
   (* Keywords *)
   | Auto
@@ -63,9 +64,16 @@ type kind =
   | Volatile
   | While
   (* _Keywords *)
+  | Alignas
+  | Alignof
+  | Atomic
   | Bool
   | Complex
+  | Generic
   | Imaginary
+  | NoReturn
+  | StaticAssert
+  | ThreadLocal
   (* Identifiers and literals *)
   | Identifier of string
   | CharLiteral of string
@@ -165,6 +173,7 @@ let pp_kind_name ?(escaped : bool = true) (fmt : Format.formatter) (kind : kind)
   match kind with
   (* Preprocessor *)
   | HeaderName { filepath; _ } -> Format.fprintf fmt "HeaderName(%s)" filepath
+  | PPIdentifier { string } -> Format.fprintf fmt "PPIdentifier(%s)" string
   | PPNumber { string; _ } -> Format.fprintf fmt "PPNumber(%s)" string
   | PPChar { string; _ } ->
       Format.fprintf fmt "PPChar(%a)" (pp_string ~escaped) string
@@ -206,9 +215,16 @@ let pp_kind_name ?(escaped : bool = true) (fmt : Format.formatter) (kind : kind)
   | Volatile -> Format.fprintf fmt "Volatile"
   | While -> Format.fprintf fmt "While"
   (* _Keywords *)
-  | Bool -> Format.fprintf fmt "_Bool"
-  | Complex -> Format.fprintf fmt "_Complex"
-  | Imaginary -> Format.fprintf fmt "_Imaginary"
+  | Alignas -> Format.fprintf fmt "Alignas"
+  | Alignof -> Format.fprintf fmt "Alignof"
+  | Atomic -> Format.fprintf fmt "Atomic"
+  | Bool -> Format.fprintf fmt "Bool"
+  | Complex -> Format.fprintf fmt "Complex"
+  | Generic -> Format.fprintf fmt "Generic"
+  | Imaginary -> Format.fprintf fmt "Imaginary"
+  | NoReturn -> Format.fprintf fmt "NoReturn"
+  | StaticAssert -> Format.fprintf fmt "StaticAssert"
+  | ThreadLocal -> Format.fprintf fmt "ThreadLocal"
   (* Identifiers and literals *)
   | Identifier str -> Format.fprintf fmt "Identifier(%s)" str
   | IntLiteral i -> Format.fprintf fmt "IntLiteral(%a)" Z.pp_print i.value

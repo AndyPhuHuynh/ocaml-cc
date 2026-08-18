@@ -24,8 +24,9 @@ type invalid =
 type kind =
   (* Preprocessing *)
   | HeaderName of header_name
-  | PPChar of Source.string_src
+  | PPIdentifier of Source.string_src
   | PPNumber of Source.string_src
+  | PPChar of Source.string_src
   | PPString of pp_string
   (* Keywords *)
   | Auto
@@ -63,9 +64,16 @@ type kind =
   | Volatile
   | While
   (* _Keywords *)
+  | Alignas
+  | Alignof
+  | Atomic
   | Bool
   | Complex
+  | Generic
   | Imaginary
+  | NoReturn
+  | StaticAssert
+  | ThreadLocal
   (* Identifiers and literals *)
   | Identifier of string
   | CharLiteral of string

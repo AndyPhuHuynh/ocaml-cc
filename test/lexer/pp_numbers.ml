@@ -83,8 +83,8 @@ a1
     3:7   Minus                   lexeme="-"
     3:8   PPNumber(2)             lexeme="2"
     4:1   Period                  lexeme="."
-    4:2   Identifier(foo)         lexeme="foo"
+    4:2   PPIdentifier(foo)       lexeme="foo"
     4:7   Period                  lexeme="."
-    5:1   Identifier(a1)          lexeme="a1"
+    5:1   PPIdentifier(a1)        lexeme="a1"
     5:3   Eof                     lexeme="\n"
     |}]

@@ -8,6 +8,8 @@ type invalid_escape_type =
   | Ucn of invalid_ucn
 
 type index_span = { start : int; finish : int }
+type identifier_error_proto = { type_ : invalid_ucn; indices : index_span }
+type identifier_error = { type_ : invalid_ucn; span : Source.span }
 
 type string_error_proto = {
   seq_type : invalid_escape_type;
@@ -36,6 +38,7 @@ type pp_number_error =
   | HexFloatNoSignificand of { loc : Source.loc }
 
 type conversion_error =
+  | IdentifierError of identifier_error list
   | StringError of string_error list
   | PPNumberError of pp_number_error
 
@@ -97,20 +100,54 @@ let print_pp_number_error (source : Source.t) (e : pp_number_error) : unit =
 
 let print_conversion_error (source : Source.t) (e : conversion_error) : unit =
   match e with
+  | IdentifierError errors ->
+      List.iter
+        (fun e ->
+          let emit_fn, msg =
+            match e.type_ with
+            | NoDigits ->
+                (Diagnostics.emit_error, "\\u used with no following hex digits")
+            | Incomplete ->
+                (Diagnostics.emit_error, "incomplete universal character name")
+            | InvalidCodePoint str ->
+                ( Diagnostics.emit_error,
+                  Printf.sprintf
+                    "character <%s> cannot be specified by a universal \
+                     character name"
+                    str )
+          in
+          emit_fn (Diagnostics.from_span source e.span msg))
+        errors
   | StringError errors ->
       List.iter (fun e -> print_string_error source e) errors
   | PPNumberError err -> print_pp_number_error source err
 
-let convert_string_error (e : string_error_proto) (source_id : Source.id)
-    (source : Source.t) (positions : Source.string_pos list) : string_error =
+let convert_indices_to_span (indices : index_span) (source_id : Source.id)
+    (source : Source.t) (positions : Source.string_pos list) : Source.span =
   let start =
-    Source.string_index_to_source_pos source e.indices.start positions
+    Source.string_index_to_source_pos source indices.start positions
   in
   let finish =
-    Source.string_index_to_source_pos source e.indices.finish positions
+    Source.string_index_to_source_pos source indices.finish positions
   in
   let length = finish - start + 1 in
-  { seq_type = e.seq_type; seq = e.seq; span = { source_id; start; length } }
+  { source_id; start; length }
+
+let convert_identifier_error (e : identifier_error_proto)
+    (source_id : Source.id) (source : Source.t)
+    (positions : Source.string_pos list) : identifier_error =
+  let span = convert_indices_to_span e.indices source_id source positions in
+  { type_ = e.type_; span }
+
+let convert_identifier_errors (es : identifier_error_proto list)
+    (source_id : Source.id) (source : Source.t)
+    (positions : Source.string_pos list) : identifier_error list =
+  List.map (fun e -> convert_identifier_error e source_id source positions) es
+
+let convert_string_error (e : string_error_proto) (source_id : Source.id)
+    (source : Source.t) (positions : Source.string_pos list) : string_error =
+  let span = convert_indices_to_span e.indices source_id source positions in
+  { seq_type = e.seq_type; seq = e.seq; span }
 
 let convert_string_errors (es : string_error_proto list) (source_id : Source.id)
     (source : Source.t) (positions : Source.string_pos list) : string_error list
@@ -123,11 +160,9 @@ let convert_pp_number_error (e : pp_number_error_proto) (source_id : Source.id)
   | InvalidDigit { digit; is_octal; index } ->
       let loc = Source.string_index_to_source_loc source index positions in
       InvalidDigit { digit; is_octal; loc }
-  | InvalidSuffix { suffix; is_float; indices = { start; finish } } ->
-      let start = Source.string_index_to_source_pos source start positions in
-      let finish = Source.string_index_to_source_pos source finish positions in
-      let length = finish - start + 1 in
-      InvalidSuffix { suffix; is_float; span = { source_id; start; length } }
+  | InvalidSuffix { suffix; is_float; indices } ->
+      let span = convert_indices_to_span indices source_id source positions in
+      InvalidSuffix { suffix; is_float; span }
   | ExponentNoDigits { index } ->
       let loc = Source.string_index_to_source_loc source index positions in
       ExponentNoDigits { loc }
@@ -177,6 +212,97 @@ let parse_ucn (s : string) (i : int) (is_eight_digits : bool) :
       if new_index = i then (Error NoDigits, new_index)
       else (Error Incomplete, new_index)
   | true, new_index -> (parse_cp i new_index, new_index)
+
+let keyword_of_string (s : string) : Token.kind =
+  match s with
+  (* Keywords *)
+  | "auto" -> Auto
+  | "break" -> Break
+  | "case" -> Case
+  | "char" -> Char
+  | "const" -> Const
+  | "continue" -> Continue
+  | "default" -> Default
+  | "do" -> Do
+  | "double" -> Double
+  | "else" -> Else
+  | "enum" -> Enum
+  | "extern" -> Extern
+  | "float" -> Float
+  | "for" -> For
+  | "goto" -> Goto
+  | "if" -> If
+  | "inline" -> Inline
+  | "int" -> Int
+  | "long" -> Long
+  | "register" -> Register
+  | "restrict" -> Restrict
+  | "return" -> Return
+  | "short" -> Short
+  | "signed" -> Signed
+  | "sizeof" -> Sizeof
+  | "static" -> Static
+  | "struct" -> Struct
+  | "switch" -> Switch
+  | "typedef" -> Typedef
+  | "union" -> Union
+  | "unsigned" -> Unsigned
+  | "void" -> Void
+  | "volatile" -> Volatile
+  | "while" -> While
+  (* _Keywords *)
+  | "_Alignas" -> Alignas
+  | "_Alignof" -> Alignof
+  | "_Atomic" -> Atomic
+  | "_Bool" -> Bool
+  | "_Complex" -> Complex
+  | "_Generic" -> Generic
+  | "_Imaginary" -> Imaginary
+  | "_Noreturn" -> NoReturn
+  | "_Static_assert" -> StaticAssert
+  | "_Thread_local" -> ThreadLocal
+  | s -> Identifier s
+
+let convert_identifier (s : string) :
+    (Token.kind, identifier_error_proto list) result =
+  let len = String.length s in
+
+  let rec transform_string (i : int) (buf : Buffer.t)
+      (errors : identifier_error_proto list) :
+      (string, identifier_error_proto list) result =
+    if i >= len then
+      match errors with
+      | [] -> Ok (Buffer.contents buf)
+      | _ -> Error (List.rev errors)
+    else
+      match s.[i] with
+      | '\\' ->
+          begin match s.[i + 1] with
+          | ('u' | 'U') as c -> begin
+              let is_eight = c = 'U' in
+              match parse_ucn s (i + 2) is_eight with
+              | Ok uchar, new_index ->
+                  Buffer.add_utf_8_uchar buf uchar;
+                  transform_string new_index buf errors
+              | Error err, new_index -> begin
+                  transform_string new_index buf
+                    ({
+                       type_ = err;
+                       indices = { start = i; finish = new_index - 1 };
+                     }
+                    :: errors)
+                end
+            end
+          | _ -> failwith "invalid backslash in identifier"
+          end
+      | c ->
+          Buffer.add_char buf c;
+          transform_string (i + 1) buf errors
+  in
+
+  let ( let* ) = Result.bind in
+  let* str = transform_string 0 (Buffer.create 16) [] in
+  Ok (keyword_of_string str)
 
 let convert_string (s : string) : string * string_error_proto list =
   let len = String.length s in
@@ -598,59 +724,20 @@ let convert_pp_number (s : string) : (Token.kind, pp_number_error_proto) result
       | Error err -> Error err
       end
 
-let keyword_of_string (s : string) : Token.kind option =
-  match s with
-  (* Keywords *)
-  | "auto" -> Some Auto
-  | "break" -> Some Break
-  | "case" -> Some Case
-  | "char" -> Some Char
-  | "const" -> Some Const
-  | "continue" -> Some Continue
-  | "default" -> Some Default
-  | "do" -> Some Do
-  | "double" -> Some Double
-  | "else" -> Some Else
-  | "enum" -> Some Enum
-  | "extern" -> Some Extern
-  | "float" -> Some Float
-  | "for" -> Some For
-  | "goto" -> Some Goto
-  | "if" -> Some If
-  | "inline" -> Some Inline
-  | "int" -> Some Int
-  | "long" -> Some Long
-  | "register" -> Some Register
-  | "restrict" -> Some Restrict
-  | "return" -> Some Return
-  | "short" -> Some Short
-  | "signed" -> Some Signed
-  | "sizeof" -> Some Sizeof
-  | "static" -> Some Static
-  | "struct" -> Some Struct
-  | "switch" -> Some Switch
-  | "typedef" -> Some Typedef
-  | "union" -> Some Union
-  | "unsigned" -> Some Unsigned
-  | "void" -> Some Void
-  | "volatile" -> Some Volatile
-  | "while" -> Some While
-  (* _Keywords *)
-  | "_Bool" -> Some Bool
-  | "_Complex" -> Some Complex
-  | "_Imaginary" -> Some Imaginary
-  | _ -> None
-
 let convert_token (token : Token.t) (manager : Source.manager) :
     conversion_result =
   let source_id = token.span.source_id in
   let source = Source.get_source manager source_id in
 
   match token.kind with
-  | Identifier name ->
-      begin match keyword_of_string name with
-      | Some kind -> Success { token with kind }
-      | None -> Success token
+  | PPIdentifier value ->
+      begin match convert_identifier value.string with
+      | Ok kind -> Success { token with kind }
+      | Error errors ->
+          Unrecoverable
+            (IdentifierError
+               (convert_identifier_errors errors source_id source
+                  value.positions))
       end
   | PPChar value -> begin
       begin match convert_string value.string with

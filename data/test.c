@@ -17,7 +17,8 @@ int main() {
     // const char *y = "\7777"; 
     // const char *x = "\xghi";
     // const char *z = "\u";
-    int x = 123\u0;
+    int x\n = 123\u0\u1;
+    "\u";
     // printf("%f", x);
     // float x = 01e10ghi;
     // printf("%c\n", c1);

@@ -7,6 +7,8 @@ type invalid_escape_type =
   | HexTooLarge
   | Ucn of invalid_ucn
 
+type identifier_error = { type_ : invalid_ucn; span : Source.span }
+
 type string_error = {
   seq_type : invalid_escape_type;
   seq : string;
@@ -21,6 +23,7 @@ type pp_number_error =
   | HexFloatNoSignificand of { loc : Source.loc }
 
 type conversion_error =
+  | IdentifierError of identifier_error list
   | StringError of string_error list
   | PPNumberError of pp_number_error
 

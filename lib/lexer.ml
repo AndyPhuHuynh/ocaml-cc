@@ -402,18 +402,25 @@ let lex_hash (lexer : t) : Token.t * t =
   | Some '#' -> make_token Token.HashHash (advance_char lexer)
   | _ -> make_token Token.Hash lexer
 
-let lex_identifier (lexer : t) (start_char : char) : Token.t * t =
-  let rec helper (lexer : t) (buf : Buffer.t) : Token.t * t =
-    match peek_char lexer with
-    | Some (('_' | 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9') as c) ->
-        Buffer.add_char buf c;
-        helper (advance_char lexer) buf
-    | _ -> make_token (Token.Identifier (Buffer.contents buf)) lexer
+let lex_identifier (lexer : t) : Token.t * t =
+  let rec helper (lexer : t) (sb : string_builder) : Token.t * t =
+    match peek_char_view lexer with
+    | Some ({ char = '\\'; _ } as cv1) -> begin
+        let next_lexer = advance_char lexer in
+        match peek_char_view next_lexer with
+        | Some ({ char = 'u' | 'U'; _ } as cv2) ->
+            sb_add_char sb cv1;
+            sb_add_char sb cv2;
+            helper (advance_char next_lexer) sb
+        | _ -> make_token (Token.PPIdentifier (sb_to_string_src sb)) lexer
+      end
+    | Some ({ char = '_' | 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9'; _ } as cv) ->
+        sb_add_char sb cv;
+        helper (advance_char lexer) sb
+    | _ -> make_token (Token.PPIdentifier (sb_to_string_src sb)) lexer
   in
 
-  let buf = Buffer.create 16 in
-  Buffer.add_char buf start_char;
-  helper lexer buf
+  helper lexer (sb_create 16)
 
 let lex_char_literal (lexer : t) : Token.t * t =
   let rec helper (lexer : t) (sb : string_builder) : Token.t * t =
@@ -486,6 +493,7 @@ let lex_token lexer =
       begin match peek_char_view lexer with
       | None -> make_token Token.Eof lexer
       | Some ({ char = c; pos; _ } as start_char_view) ->
+          let prev_lexer = { lexer with start = pos } in
           let lexer = advance_char { lexer with start = pos } in
           begin match c with
           (* Operators *)
@@ -522,20 +530,25 @@ let lex_token lexer =
               | None ->
                   begin match lex_sequence lexer "\"" with
                   | Some new_lexer -> lex_string_literal new_lexer Utf16
-                  | None -> lex_identifier lexer c
+                  | None -> lex_identifier prev_lexer
                   end
               end
           | 'U' ->
               begin match lex_sequence lexer "\"" with
               | Some new_lexer -> lex_string_literal new_lexer Utf32
-              | None -> lex_identifier lexer c
+              | None -> lex_identifier prev_lexer
               end
           | 'L' ->
               begin match lex_sequence lexer "\"" with
               | Some new_lexer -> lex_string_literal new_lexer WChar
-              | None -> lex_identifier lexer c
+              | None -> lex_identifier prev_lexer
               end
-          | '_' | 'a' .. 'z' | 'A' .. 'Z' -> lex_identifier lexer c
+          | '\\' ->
+              begin match peek_char lexer with
+              | Some ('u' | 'U') -> lex_identifier prev_lexer
+              | _ -> make_token (Token.Invalid (Token.InvalidChar c)) lexer
+              end
+          | '_' | 'a' .. 'z' | 'A' .. 'Z' -> lex_identifier prev_lexer
           | '0' .. '9' -> lex_pp_number lexer start_char_view
           | '\'' -> lex_char_literal lexer
           | '"' -> lex_string_literal lexer None

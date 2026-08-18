@@ -25,7 +25,7 @@ b"
       loc: 2:1
       lexeme: "#"
 
-    Identifier(include)
+    PPIdentifier(include)
       loc: 2:2
       lexeme: "include"
 
@@ -35,7 +35,7 @@ b"
       type: NonLocal
       lexeme: "<my\\\nheader>"
 
-    Identifier(identifier)
+    PPIdentifier(identifier)
       loc: 5:1
       lexeme: "ident\\\nifier"
 
