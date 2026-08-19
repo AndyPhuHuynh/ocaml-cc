@@ -12,7 +12,7 @@ let () =
   end;
 
   match Inspect.lex_all { display_name = None; filepath = !input_file } with
-  | Ok (tokens, manager) -> begin
+  | Ok (tokens, manager, _) -> begin
       List.iter
         (fun tok -> Format.printf "%a@.@." (Token.pp_verbose manager) tok)
         tokens

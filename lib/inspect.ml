@@ -1,4 +1,5 @@
-type inspect_result = (Token.t list * Source.manager, Source.load_error) result
+type inspect_result =
+  (Token.t list * Source.manager * Diagnostics.engine, Source.load_error) result
 
 let print_source_error (err : Source.load_error) : unit =
   match err with
@@ -8,7 +9,7 @@ let print_source_error (err : Source.load_error) : unit =
 let print_result ?(escaped : bool = true) ?(verbose : bool = false)
     (result : inspect_result) : unit =
   match result with
-  | Ok (tokens, manager) ->
+  | Ok (tokens, manager, _) ->
       let formatter =
         if verbose then Token.pp_list_verbose ~escaped
         else Token.pp_list_compact ~escaped
@@ -35,7 +36,9 @@ let lex_all (load_file : Source.load_file) : inspect_result =
   in
 
   match Source.load_file Source.empty_manager load_file with
-  | Ok (manager, id, source) -> Ok (helper (Lexer.create id source) [], manager)
+  | Ok (manager, id, source) ->
+      let diagnostics = Diagnostics.create_engine () in
+      Ok (helper (Lexer.create id source diagnostics) [], manager, diagnostics)
   | Error err -> Error err
 
 let pp_all (load_file : Source.load_file) (manager : Source.manager) :
@@ -48,14 +51,17 @@ let pp_all (load_file : Source.load_file) (manager : Source.manager) :
     | _ -> helper pp (tok :: acc)
   in
 
-  match Preprocessor.create load_file with
-  | Ok pp -> Ok (helper pp [])
+  let diagnostics = Diagnostics.create_engine () in
+  match Preprocessor.create load_file diagnostics with
+  | Ok pp ->
+      let tokens, manager = helper pp [] in
+      Ok (tokens, manager, diagnostics)
   | Error err -> Error err
 
 let convert_all (load_file : Source.load_file) (manager : Source.manager) :
     inspect_result =
   match pp_all load_file manager with
-  | Ok (tokens, manager) -> begin
+  | Ok (tokens, manager, diagnostics) -> begin
       let tokens =
         List.filter_map
           (fun (tok : Token.t) ->
@@ -63,13 +69,13 @@ let convert_all (load_file : Source.load_file) (manager : Source.manager) :
             match Token_converter.convert_token tok manager with
             | Success tok -> Some tok
             | Recovered (tok, err) ->
-                Token_converter.print_conversion_error source err;
+                Token_converter.emit_conversion_error diagnostics source err;
                 Some tok
             | Unrecoverable err ->
-                Token_converter.print_conversion_error source err;
+                Token_converter.emit_conversion_error diagnostics source err;
                 None)
           tokens
       in
-      Ok (tokens, manager)
+      Ok (tokens, manager, diagnostics)
     end
   | Error err -> Error err

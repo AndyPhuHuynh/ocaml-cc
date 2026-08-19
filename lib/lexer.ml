@@ -1,4 +1,5 @@
 type t = {
+  diagnostics : Diagnostics.engine;
   source_id : Source.id;
   source : Source.t;
   position : Source.pos;
@@ -17,8 +18,10 @@ let is_digit (c : char) : bool = match c with '0' .. '9' -> true | _ -> false
 let is_exponent_prefix (c : char) : bool =
   match c with 'e' | 'E' | 'p' | 'P' -> true | _ -> false
 
-let create (source_id : Source.id) (source : Source.t) : t =
+let create (source_id : Source.id) (source : Source.t)
+    (diagnostics : Diagnostics.engine) : t =
   {
+    diagnostics;
     source_id;
     source;
     position = Source.default_pos;
@@ -120,8 +123,9 @@ let find_line_splice_sequence (lexer : t) : splice list =
   in
   helper lexer []
 
-let emit_splice_diagnostic (splice : splice) : unit =
-  Diagnostics.emit_warning
+let emit_splice_diagnostic (diagnostics : Diagnostics.engine) (splice : splice)
+    : unit =
+  Diagnostics.emit_warning diagnostics
     (Diagnostics.at splice.lexer.source splice.loc
        "backslash and newline separated by whitespace")
 
@@ -158,12 +162,12 @@ let advance_char (lexer : t) : t =
     | [] -> None
     | [ x ] ->
         if x.whitespace_separated then begin
-          emit_splice_diagnostic x
+          emit_splice_diagnostic lexer.diagnostics x
         end;
         Some x.lexer
     | x :: xs ->
         if x.whitespace_separated then begin
-          emit_splice_diagnostic x
+          emit_splice_diagnostic lexer.diagnostics x
         end;
         iter_splices xs
   in

@@ -47,7 +47,8 @@ type conversion_result =
   | Recovered of Token.t * conversion_error
   | Unrecoverable of conversion_error
 
-let print_string_error (source : Source.t) (e : string_error) : unit =
+let emit_string_error (diagnostics : Diagnostics.engine) (source : Source.t)
+    (e : string_error) : unit =
   let emit_fn, msg =
     match e.seq_type with
     | SeqNormal ->
@@ -72,33 +73,35 @@ let print_string_error (source : Source.t) (e : string_error) : unit =
                 str )
         end
   in
-  emit_fn (Diagnostics.from_span source e.span msg)
+  emit_fn diagnostics (Diagnostics.from_span source e.span msg)
 
-let print_pp_number_error (source : Source.t) (e : pp_number_error) : unit =
+let emit_pp_number_error (diagnostics : Diagnostics.engine) (source : Source.t)
+    (e : pp_number_error) : unit =
   match e with
   | InvalidDigit { digit; is_octal; loc } ->
       let type_ = if is_octal then "octal" else "integer" in
       let msg =
         Printf.sprintf "invalid digit '%c' in %s constant" digit type_
       in
-      Diagnostics.emit_error (Diagnostics.at source loc msg)
+      Diagnostics.emit_error diagnostics (Diagnostics.at source loc msg)
   | InvalidSuffix { suffix; is_float; span } ->
       let type_ = if is_float then "floating" else "integer" in
       let msg =
         Printf.sprintf "invalid suffix '%s' on %s constant" suffix type_
       in
-      Diagnostics.emit_error (Diagnostics.from_span source span msg)
+      Diagnostics.emit_error diagnostics (Diagnostics.from_span source span msg)
   | ExponentNoDigits { loc } ->
       let msg = "exponent has no digits" in
-      Diagnostics.emit_error (Diagnostics.at source loc msg)
+      Diagnostics.emit_error diagnostics (Diagnostics.at source loc msg)
   | HexFloatNoExponent { loc } ->
       let msg = "hexadecimal floating constant requires an exponent" in
-      Diagnostics.emit_error (Diagnostics.at source loc msg)
+      Diagnostics.emit_error diagnostics (Diagnostics.at source loc msg)
   | HexFloatNoSignificand { loc } ->
       let msg = "hexadecimal floating constant requires a significand" in
-      Diagnostics.emit_error (Diagnostics.at source loc msg)
+      Diagnostics.emit_error diagnostics (Diagnostics.at source loc msg)
 
-let print_conversion_error (source : Source.t) (e : conversion_error) : unit =
+let emit_conversion_error (diagnostics : Diagnostics.engine) (source : Source.t)
+    (e : conversion_error) : unit =
   match e with
   | IdentifierError errors ->
       List.iter
@@ -116,11 +119,11 @@ let print_conversion_error (source : Source.t) (e : conversion_error) : unit =
                      character name"
                     str )
           in
-          emit_fn (Diagnostics.from_span source e.span msg))
+          emit_fn diagnostics (Diagnostics.from_span source e.span msg))
         errors
   | StringError errors ->
-      List.iter (fun e -> print_string_error source e) errors
-  | PPNumberError err -> print_pp_number_error source err
+      List.iter (fun e -> emit_string_error diagnostics source e) errors
+  | PPNumberError err -> emit_pp_number_error diagnostics source err
 
 let convert_indices_to_span (indices : index_span) (source_id : Source.id)
     (source : Source.t) (positions : Source.string_pos list) : Source.span =

@@ -1,17 +1,10 @@
 type defines = string list
-
-type source = {
-  id : Source.id;
-  source : Source.t;
-  lexer : Lexer.t;
-  child_include_location : Source.loc option;
-}
-
+type source = { id : Source.id; source : Source.t; lexer : Lexer.t }
 type source_stack = { current : source; rest : source list; size : int }
 
 type t = {
+  diagnostics : Diagnostics.engine;
   defines : defines;
-  include_stack_printed : bool;
   source_manager : Source.manager;
   source_stack : source_stack;
 }
@@ -19,32 +12,6 @@ type t = {
 let ( let* ) = Result.bind
 let get_current_source (pp : t) : Source.t = pp.source_stack.current.source
 let get_current_filepath (pp : t) : string = (get_current_source pp).filepath
-
-let print_include_stack (pp : t) : unit =
-  let stack = List.rev pp.source_stack.rest in
-  List.iter
-    (fun source ->
-      let loc = Option.get source.child_include_location in
-      Printf.eprintf "In file included from %s:%d:%d\n"
-        source.source.display_name loc.line loc.col)
-    stack
-
-let emit_error (pp : t) (diag : Diagnostics.t) : t =
-  let new_pp =
-    if not pp.include_stack_printed then begin
-      print_include_stack pp;
-      Some { pp with include_stack_printed = true }
-    end
-    else None
-  in
-  Diagnostics.emit_error diag;
-  Option.value new_pp ~default:pp
-
-let emit_fatal_error (pp : t) (diag : Diagnostics.t) (exit_code : int) : 'a =
-  if not pp.include_stack_printed then begin
-    print_include_stack pp
-  end;
-  Diagnostics.emit_fatal_error diag exit_code
 
 let get_paths_from_include (current_file : string) (include_ : string) =
   Filename.concat (Filename.dirname current_file) include_
@@ -64,40 +31,27 @@ let append_source (pp : t) (source : Source.load_file)
     (include_location : Source.loc) : (t, Source.load_error) result =
   let* source_manager, id, source = Source.load_file pp.source_manager source in
 
-  let current =
-    {
-      id;
-      source;
-      lexer = Lexer.create id source;
-      child_include_location = None;
-    }
-  in
+  let current = { id; source; lexer = Lexer.create id source pp.diagnostics } in
   let source_stack =
     {
       current;
-      rest =
-        {
-          pp.source_stack.current with
-          child_include_location = Some include_location;
-        }
-        :: pp.source_stack.rest;
+      rest = pp.source_stack.current :: pp.source_stack.rest;
       size = pp.source_stack.size + 1;
     }
   in
-  Ok { pp with include_stack_printed = false; source_manager; source_stack }
+  Diagnostics.add_include pp.diagnostics
+    pp.source_stack.current.source.display_name include_location;
+  Ok { pp with source_manager; source_stack }
 
 let pop_source (pp : t) : t =
   match pp.source_stack.rest with
   | [] -> failwith "Attempting to pop empty source"
   | x :: xs ->
       let source_stack =
-        {
-          current = { x with child_include_location = None };
-          rest = xs;
-          size = pp.source_stack.size - 1;
-        }
+        { current = x; rest = xs; size = pp.source_stack.size - 1 }
       in
-      { pp with include_stack_printed = false; source_stack }
+      Diagnostics.remove_include pp.diagnostics;
+      { pp with source_stack }
 
 let rec skip_line (pp : t) =
   let token, lexer = lex_current pp in
@@ -110,10 +64,8 @@ let process_directive_include (pp : t) (include_location : Source.loc) : t =
   let pp = update_lexer pp lexer in
   match token.kind with
   | HeaderName { filepath = ""; _ } ->
-      let pp =
-        emit_error pp
-          (Diagnostics.at (get_current_source pp) token.loc "empty filename")
-      in
+      Diagnostics.emit_error pp.diagnostics
+        (Diagnostics.at (get_current_source pp) token.loc "empty filename");
       skip_line pp
   | HeaderName { filepath; _ } -> begin
       let full_path =
@@ -121,11 +73,10 @@ let process_directive_include (pp : t) (include_location : Source.loc) : t =
       in
 
       if pp.source_stack.size >= 256 then begin
-        let diag =
-          Diagnostics.at (get_current_source pp) token.loc
-            "maximum include depth exceeded"
-        in
-        emit_fatal_error pp diag 1
+        Diagnostics.emit_fatal_error pp.diagnostics
+          (Diagnostics.at (get_current_source pp) token.loc
+             "maximum include depth exceeded")
+          1
       end;
 
       match
@@ -135,22 +86,20 @@ let process_directive_include (pp : t) (include_location : Source.loc) : t =
       with
       | Ok new_pp -> new_pp
       | Error (FileNotFound filepath) ->
-          let source = get_current_source pp in
-          emit_fatal_error pp
-            (Diagnostics.range source token.loc
-               (Source.get_span_end source token.span)
+          Diagnostics.emit_fatal_error pp.diagnostics
+            (Diagnostics.from_span (get_current_source pp) token.span
                (Printf.sprintf "'%s' file not found" filepath))
             1
       | Error (IOError msg) ->
-          emit_fatal_error pp
+          Diagnostics.emit_fatal_error pp.diagnostics
             (Diagnostics.at (get_current_source pp) token.loc msg)
             1
     end
   | _ -> begin
-      Format.printf "Expect header name, got: %a\n"
-        (Token.pp_kind_name ~escaped:false)
-        token.kind;
-      exit 1
+      Diagnostics.emit_error pp.diagnostics
+        (Diagnostics.at (get_current_source pp) token.loc
+           "expected \"FILENAME\" or <FILENAME>");
+      skip_line pp
     end
 
 let rec process_directive_invalid (pp : t) : t =
@@ -159,7 +108,7 @@ let rec process_directive_invalid (pp : t) : t =
     Printf.sprintf "invalid preprocessing directive: %s"
       (Source.span_to_string invalid.span pp.source_manager)
   in
-  Diagnostics.emit_error
+  Diagnostics.emit_error pp.diagnostics
     (Diagnostics.at (get_current_source pp) invalid.loc msg);
   skip_line pp
 
@@ -171,24 +120,20 @@ let process_directive (pp : t) (hash_location : Source.loc) : t =
   | NewLine -> update_lexer pp lexer
   | _ -> process_directive_invalid pp
 
-let create (load_type : Source.load_file) : (t, Source.load_error) result =
+let create (load_type : Source.load_file) (diagnostics : Diagnostics.engine) :
+    (t, Source.load_error) result =
   let* new_manager, source_id, source =
     Source.load_file Source.empty_manager load_type
   in
-  let lexer = Lexer.create source_id source in
+  let lexer = Lexer.create source_id source diagnostics in
 
   Ok
     {
+      diagnostics;
       defines = [];
-      include_stack_printed = false;
       source_manager = new_manager;
       source_stack =
-        {
-          current =
-            { id = source_id; source; lexer; child_include_location = None };
-          rest = [];
-          size = 0;
-        };
+        { current = { id = source_id; source; lexer }; rest = []; size = 0 };
     }
 
 let get_source_manager (pp : t) : Source.manager = pp.source_manager

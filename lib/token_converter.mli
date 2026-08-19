@@ -32,7 +32,12 @@ type conversion_result =
   | Recovered of Token.t * conversion_error
   | Unrecoverable of conversion_error
 
-val print_string_error : Source.t -> string_error -> unit
-val print_pp_number_error : Source.t -> pp_number_error -> unit
-val print_conversion_error : Source.t -> conversion_error -> unit
+val emit_string_error : Diagnostics.engine -> Source.t -> string_error -> unit
+
+val emit_pp_number_error :
+  Diagnostics.engine -> Source.t -> pp_number_error -> unit
+
+val emit_conversion_error :
+  Diagnostics.engine -> Source.t -> conversion_error -> unit
+
 val convert_token : Token.t -> Source.manager -> conversion_result
