@@ -65,6 +65,12 @@ let%expect_test "invalid int literal suffix" =
 |};
   [%expect
     {|
+     2:1   IntLiteral(0)           suffix: None lexeme="12345qwr_"
+     3:1   IntLiteral(0)           suffix: None lexeme="0xABC_ghi"
+     4:1   IntLiteral(0)           suffix: None lexeme="01234g.62"
+     6:1   IntLiteral(0)           suffix: None lexeme="123abc"
+     7:1   IntLiteral(0)           suffix: None lexeme="012789"
+     8:1   IntLiteral(0)           suffix: None lexeme="012def"
      8:7   Eof                     lexeme="\n"
 
     [1mconverter_test:2:6[0m: [1;31merror[0m: [1minvalid suffix 'qwr_' on integer constant[0m
@@ -110,21 +116,12 @@ let%expect_test "valid float literals" =
      3:6   FloatLiteral(39/5)      suffix: L    lexeme="7.8L"
      5:1   FloatLiteral(3/25)      suffix: None lexeme=".12"
      6:1   FloatLiteral(12)        suffix: None lexeme=".12e2"
+     7:1   FloatLiteral(12)        suffix: None lexeme=".12e+2"
+     8:1   FloatLiteral(3/2500)    suffix: None lexeme=".12e-2"
     10:1   FloatLiteral(34000)     suffix: None lexeme="34e3"
+    11:1   FloatLiteral(34000)     suffix: None lexeme="34e+3"
+    12:1   FloatLiteral(17/500)    suffix: None lexeme="34e-3"
     12:6   Eof                     lexeme="\n"
-
-    [1mconverter_test:7:4[0m: [1;31merror[0m: [1mexponent has no digits[0m
-        7 | .12e+2
-          |    [1;32m^[0m
-    [1mconverter_test:8:4[0m: [1;31merror[0m: [1mexponent has no digits[0m
-        8 | .12e-2
-          |    [1;32m^[0m
-    [1mconverter_test:11:3[0m: [1;31merror[0m: [1mexponent has no digits[0m
-       11 | 34e+3
-          |   [1;32m^[0m
-    [1mconverter_test:12:3[0m: [1;31merror[0m: [1mexponent has no digits[0m
-       12 | 34e-3
-          |   [1;32m^[0m
     |}]
 
 let%expect_test "valid hexadecimal float literals" =
@@ -167,12 +164,20 @@ let%expect_test "exponent no digits" =
 |};
   [%expect
     {|
+     2:1   FloatLiteral(0)         suffix: None lexeme="123e"
+     3:1   FloatLiteral(0)         suffix: None lexeme="123E"
+     4:1   FloatLiteral(0)         suffix: None lexeme="456e+"
      4:6   Plus                    lexeme="+"
      4:7   IntLiteral(1)           suffix: None lexeme="1"
+     5:1   FloatLiteral(0)         suffix: None lexeme="456E-"
      5:6   Minus                   lexeme="-"
      5:7   IntLiteral(2)           suffix: None lexeme="2"
+     7:1   FloatLiteral(0)         suffix: None lexeme="0xFFp"
+     8:1   FloatLiteral(0)         suffix: None lexeme="0xFFP"
+     9:1   FloatLiteral(0)         suffix: None lexeme="0xFFp+"
      9:7   Plus                    lexeme="+"
      9:8   IntLiteral(1)           suffix: None lexeme="1"
+    10:1   FloatLiteral(0)         suffix: None lexeme="0xFFp-"
     10:7   Minus                   lexeme="-"
     10:8   IntLiteral(2)           suffix: None lexeme="2"
     10:9   Eof                     lexeme="\n"
@@ -210,6 +215,11 @@ let%expect_test "hexadecimal float no exponent and significand" =
 0x.l 0x.L
 |};
   [%expect {|
+     2:1   FloatLiteral(0)         suffix: None lexeme="0x."
+     3:1   FloatLiteral(0)         suffix: None lexeme="0x.f"
+     3:6   FloatLiteral(0)         suffix: None lexeme="0x.F"
+     4:1   FloatLiteral(0)         suffix: None lexeme="0x.l"
+     4:6   FloatLiteral(0)         suffix: None lexeme="0x.L"
      4:10  Eof                     lexeme="\n"
 
     [1mconverter_test:2:4[0m: [1;31merror[0m: [1mhexadecimal floating constant requires a significand[0m

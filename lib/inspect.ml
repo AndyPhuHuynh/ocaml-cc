@@ -60,22 +60,18 @@ let pp_all (load_file : Source.load_file) (manager : Source.manager) :
 
 let convert_all (load_file : Source.load_file) (manager : Source.manager) :
     inspect_result =
-  match pp_all load_file manager with
-  | Ok (tokens, manager, diagnostics) -> begin
-      let tokens =
-        List.filter_map
-          (fun (tok : Token.t) ->
-            let source = Source.get_source manager tok.span.source_id in
-            match Token_converter.convert_token tok manager with
-            | Success tok -> Some tok
-            | Recovered (tok, err) ->
-                Token_converter.emit_conversion_error diagnostics source err;
-                Some tok
-            | Unrecoverable err ->
-                Token_converter.emit_conversion_error diagnostics source err;
-                None)
-          tokens
-      in
+  let rec helper (converter : Token_converter.t) (acc : Token.t list) :
+      Token.t list * Source.manager =
+    let tok, _, converter = Token_converter.next_token converter in
+    match tok.kind with
+    | Eof ->
+        (List.rev (tok :: acc), Token_converter.get_source_manager converter)
+    | _ -> helper converter (tok :: acc)
+  in
+
+  let diagnostics = Diagnostics.create_engine () in
+  match Token_converter.create load_file diagnostics with
+  | Ok pp ->
+      let tokens, manager = helper pp [] in
       Ok (tokens, manager, diagnostics)
-    end
   | Error err -> Error err

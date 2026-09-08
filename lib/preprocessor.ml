@@ -120,10 +120,10 @@ let process_directive (pp : t) (hash_location : Source.loc) : t =
   | NewLine -> update_lexer pp lexer
   | _ -> process_directive_invalid pp
 
-let create (load_type : Source.load_file) (diagnostics : Diagnostics.engine) :
+let create (load_file : Source.load_file) (diagnostics : Diagnostics.engine) :
     (t, Source.load_error) result =
   let* new_manager, source_id, source =
-    Source.load_file Source.empty_manager load_type
+    Source.load_file Source.empty_manager load_file
   in
   let lexer = Lexer.create source_id source diagnostics in
 

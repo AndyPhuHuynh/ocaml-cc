@@ -5,6 +5,9 @@ let%expect_test "ucn in suffix" =
 789\U00000076
 |};
   [%expect {|
+     2:1   IntLiteral(0)           suffix: None lexeme="123\\u0075"
+     3:1   IntLiteral(0)           suffix: None lexeme="456\\u"
+     4:1   IntLiteral(0)           suffix: None lexeme="789\\U00000076"
      4:14  Eof                     lexeme="\n"
 
     [1mconverter_test:2:4[0m: [1;31merror[0m: [1minvalid suffix '\u0075' on integer constant[0m

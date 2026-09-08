@@ -17,6 +17,10 @@ let%expect_test "invalid identifiers with ucn" =
 \uhello
 |};
   [%expect {|
+     2:1   StringLiteral("u0041")  lexeme="\\u0041"
+     3:1   StringLiteral("uD800")  lexeme="\\uD800"
+     4:1   StringLiteral("u41")    lexeme="\\u41"
+     5:1   StringLiteral("uhello")  lexeme="\\uhello"
      5:8   Eof                     lexeme="\n"
 
     [1mconverter_test:2:1[0m: [1;31merror[0m: [1mcharacter <U+0041> cannot be specified by a universal character name[0m

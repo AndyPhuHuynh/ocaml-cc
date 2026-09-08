@@ -1,3 +1,5 @@
+let ( let* ) = Result.bind
+
 type invalid_ucn = NoDigits | Incomplete | InvalidCodePoint of string
 
 type invalid_escape_type =
@@ -37,15 +39,34 @@ type pp_number_error =
   | HexFloatNoExponent of { loc : Source.loc }
   | HexFloatNoSignificand of { loc : Source.loc }
 
-type conversion_error =
-  | IdentifierError of identifier_error list
-  | StringError of string_error list
-  | PPNumberError of pp_number_error
+let get_ucn_error_msg (err : invalid_ucn) : string =
+  begin match err with
+  | NoDigits -> "\\u used with no following hex digits"
+  | Incomplete -> "incomplete universal character name"
+  | InvalidCodePoint str ->
+      Printf.sprintf
+        "character <%s> cannot be specified by a universal character name" str
+  end
 
-type conversion_result =
-  | Success of Token.t
-  | Recovered of Token.t * conversion_error
-  | Unrecoverable of conversion_error
+let emit_identifier_error (diagnostics : Diagnostics.engine) (source : Source.t)
+    (e : identifier_error) =
+  let emit_fn, msg =
+    match e.type_ with
+    | NoDigits ->
+        (Diagnostics.emit_error, "\\u used with no following hex digits")
+    | Incomplete ->
+        (Diagnostics.emit_error, "incomplete universal character name")
+    | InvalidCodePoint str ->
+        ( Diagnostics.emit_error,
+          Printf.sprintf
+            "character <%s> cannot be specified by a universal character name"
+            str )
+  in
+  emit_fn diagnostics (Diagnostics.from_span source e.span msg)
+
+let emit_identifier_errors (diagnostics : Diagnostics.engine)
+    (source : Source.t) (errors : identifier_error list) : unit =
+  List.iter (fun e -> emit_identifier_error diagnostics source e) errors
 
 let emit_string_error (diagnostics : Diagnostics.engine) (source : Source.t)
     (e : string_error) : unit =
@@ -59,21 +80,13 @@ let emit_string_error (diagnostics : Diagnostics.engine) (source : Source.t)
     | HexNoDigits ->
         (Diagnostics.emit_error, "\\x used with no following hex digits")
     | HexTooLarge -> (Diagnostics.emit_error, "hex escape sequence out of range")
-    | Ucn err ->
-        begin match err with
-        | NoDigits ->
-            (Diagnostics.emit_error, "\\u used with no following hex digits")
-        | Incomplete ->
-            (Diagnostics.emit_error, "incomplete universal character name")
-        | InvalidCodePoint str ->
-            ( Diagnostics.emit_error,
-              Printf.sprintf
-                "character <%s> cannot be specified by a universal character \
-                 name"
-                str )
-        end
+    | Ucn err -> (Diagnostics.emit_error, get_ucn_error_msg err)
   in
   emit_fn diagnostics (Diagnostics.from_span source e.span msg)
+
+let emit_string_errors (diagnostics : Diagnostics.engine) (source : Source.t)
+    (errors : string_error list) : unit =
+  List.iter (fun e -> emit_string_error diagnostics source e) errors
 
 let emit_pp_number_error (diagnostics : Diagnostics.engine) (source : Source.t)
     (e : pp_number_error) : unit =
@@ -99,31 +112,6 @@ let emit_pp_number_error (diagnostics : Diagnostics.engine) (source : Source.t)
   | HexFloatNoSignificand { loc } ->
       let msg = "hexadecimal floating constant requires a significand" in
       Diagnostics.emit_error diagnostics (Diagnostics.at source loc msg)
-
-let emit_conversion_error (diagnostics : Diagnostics.engine) (source : Source.t)
-    (e : conversion_error) : unit =
-  match e with
-  | IdentifierError errors ->
-      List.iter
-        (fun e ->
-          let emit_fn, msg =
-            match e.type_ with
-            | NoDigits ->
-                (Diagnostics.emit_error, "\\u used with no following hex digits")
-            | Incomplete ->
-                (Diagnostics.emit_error, "incomplete universal character name")
-            | InvalidCodePoint str ->
-                ( Diagnostics.emit_error,
-                  Printf.sprintf
-                    "character <%s> cannot be specified by a universal \
-                     character name"
-                    str )
-          in
-          emit_fn diagnostics (Diagnostics.from_span source e.span msg))
-        errors
-  | StringError errors ->
-      List.iter (fun e -> emit_string_error diagnostics source e) errors
-  | PPNumberError err -> emit_pp_number_error diagnostics source err
 
 let convert_indices_to_span (indices : index_span) (source_id : Source.id)
     (source : Source.t) (positions : Source.string_pos list) : Source.span =
@@ -266,17 +254,13 @@ let keyword_of_string (s : string) : Token.kind =
   | "_Thread_local" -> ThreadLocal
   | s -> Identifier s
 
-let convert_identifier (s : string) :
-    (Token.kind, identifier_error_proto list) result =
+let convert_identifier (s : string) : Token.kind * identifier_error_proto list =
   let len = String.length s in
 
   let rec transform_string (i : int) (buf : Buffer.t)
       (errors : identifier_error_proto list) :
-      (string, identifier_error_proto list) result =
-    if i >= len then
-      match errors with
-      | [] -> Ok (Buffer.contents buf)
-      | _ -> Error (List.rev errors)
+      string * identifier_error_proto list =
+    if i >= len then (Buffer.contents buf, List.rev errors)
     else
       match s.[i] with
       | '\\' ->
@@ -288,6 +272,8 @@ let convert_identifier (s : string) :
                   Buffer.add_utf_8_uchar buf uchar;
                   transform_string new_index buf errors
               | Error err, new_index -> begin
+                  let len = new_index - (i + 1) in
+                  Buffer.add_substring buf s (i + 1) len;
                   transform_string new_index buf
                     ({
                        type_ = err;
@@ -303,9 +289,9 @@ let convert_identifier (s : string) :
           transform_string (i + 1) buf errors
   in
 
-  let ( let* ) = Result.bind in
-  let* str = transform_string 0 (Buffer.create 16) [] in
-  Ok (keyword_of_string str)
+  match transform_string 0 (Buffer.create 16) [] with
+  | str, [] -> (keyword_of_string str, [])
+  | str, errs -> (Token.StringLiteral str, errs)
 
 let convert_string (s : string) : string * string_error_proto list =
   let len = String.length s in
@@ -559,7 +545,7 @@ let parse_decimal_float_literal (s : string) :
           if i + 1 >= len then i
           else
             begin match s.[i + 1] with
-            | '+' | '-' -> if i + 2 >= len then i else skip_digits i
+            | '+' | '-' -> if i + 2 >= len then i else skip_digits (i + 2)
             | _ -> skip_digits (i + 1)
             end
       | _ -> i
@@ -716,58 +702,75 @@ let parse_float_literal (s : string) :
     parse_hex_float_literal s
   else parse_decimal_float_literal s
 
-let convert_pp_number (s : string) : (Token.kind, pp_number_error_proto) result
-    =
+let convert_pp_number (s : string) : Token.kind * pp_number_error_proto option =
   match parse_int_literal s with
-  | Ok literal -> Ok (Token.IntLiteral literal)
-  | Error (PPNumberErrorProto err) -> Error err
+  | Ok literal -> (Token.IntLiteral literal, None)
+  | Error (PPNumberErrorProto err) ->
+      (Token.IntLiteral { value = Z.zero; suffix = None }, Some err)
   | Error MaybeFloat ->
       begin match parse_float_literal s with
-      | Ok literal -> Ok (Token.FloatLiteral literal)
-      | Error err -> Error err
+      | Ok literal -> (Token.FloatLiteral literal, None)
+      | Error err ->
+          (Token.FloatLiteral { value = Q.zero; suffix = None }, Some err)
       end
 
-let convert_token (token : Token.t) (manager : Source.manager) :
-    conversion_result =
+let convert_token (diagnostics : Diagnostics.engine) (manager : Source.manager)
+    (token : Token.t) : Token.t * bool =
   let source_id = token.span.source_id in
   let source = Source.get_source manager source_id in
 
   match token.kind with
   | PPIdentifier value ->
       begin match convert_identifier value.string with
-      | Ok kind -> Success { token with kind }
-      | Error errors ->
-          Unrecoverable
-            (IdentifierError
-               (convert_identifier_errors errors source_id source
-                  value.positions))
+      | kind, [] -> ({ token with kind }, true)
+      | kind, errors ->
+          emit_identifier_errors diagnostics source
+            (convert_identifier_errors errors source_id source value.positions);
+          ({ token with kind }, false)
       end
   | PPNumber value ->
       begin match convert_pp_number value.string with
-      | Ok kind -> Success { token with kind }
-      | Error err ->
-          Unrecoverable
-            (PPNumberError
-               (convert_pp_number_error err source_id source value.positions))
+      | kind, None -> ({ token with kind }, true)
+      | kind, Some err ->
+          emit_pp_number_error diagnostics source
+            (convert_pp_number_error err source_id source value.positions);
+          ({ token with kind }, false)
       end
   | PPChar { prefix; contents = { string; positions } } -> begin
       begin match convert_string string with
-      | new_str, [] -> Success { token with kind = CharLiteral new_str }
+      | new_str, [] -> ({ token with kind = CharLiteral new_str }, true)
       | new_str, errors ->
-          Recovered
-            ( { token with kind = CharLiteral new_str },
-              StringError
-                (convert_string_errors errors source_id source positions) )
+          emit_string_errors diagnostics source
+            (convert_string_errors errors source_id source positions);
+          ({ token with kind = CharLiteral new_str }, false)
       end
     end
   | PPString { prefix; contents = { string; positions } } -> begin
       begin match convert_string string with
-      | new_str, [] -> Success { token with kind = StringLiteral new_str }
+      | new_str, [] -> ({ token with kind = StringLiteral new_str }, true)
       | new_str, errors ->
-          Recovered
-            ( { token with kind = StringLiteral new_str },
-              StringError
-                (convert_string_errors errors source_id source positions) )
+          emit_string_errors diagnostics source
+            (convert_string_errors errors source_id source positions);
+          ({ token with kind = StringLiteral new_str }, false)
       end
     end
-  | _ -> Success token
+  | _ -> (token, true)
+
+type t = { diagnostics : Diagnostics.engine; pp : Preprocessor.t }
+
+let create (load_file : Source.load_file) (diagnostics : Diagnostics.engine) :
+    (t, Source.load_error) result =
+  let* pp = Preprocessor.create load_file diagnostics in
+  Ok { pp; diagnostics }
+
+let get_source_manager (converter : t) : Source.manager =
+  Preprocessor.get_source_manager converter.pp
+
+let next_token (converter : t) : Token.t * bool * t =
+  let tok, pp = Preprocessor.next_token converter.pp in
+  let tok, had_error =
+    convert_token converter.diagnostics (get_source_manager converter) tok
+  in
+
+  let new_converter = { converter with pp } in
+  (tok, had_error, new_converter)
