@@ -25,6 +25,120 @@ type invalid =
   | UnterminatedStringLiteral
   | InvalidChar of char
 
+type kind_tag =
+  (* Preprocessing *)
+  | HeaderName
+  | PPIdentifier
+  | PPNumber
+  | PPChar
+  | PPString
+  (* Keywords *)
+  | Auto
+  | Break
+  | Case
+  | Char
+  | Const
+  | Continue
+  | Default
+  | Do
+  | Double
+  | Else
+  | Enum
+  | Extern
+  | Float
+  | For
+  | Goto
+  | If
+  | Inline
+  | Int
+  | Long
+  | Register
+  | Restrict
+  | Return
+  | Short
+  | Signed
+  | Sizeof
+  | Static
+  | Struct
+  | Switch
+  | Typedef
+  | Union
+  | Unsigned
+  | Void
+  | Volatile
+  | While
+  (* _Keywords *)
+  | Alignas
+  | Alignof
+  | Atomic
+  | Bool
+  | Complex
+  | Generic
+  | Imaginary
+  | NoReturn
+  | StaticAssert
+  | ThreadLocal
+  (* Identifiers and literals *)
+  | Identifier
+  | CharLiteral
+  | IntLiteral
+  | FloatLiteral
+  | StringLiteral
+  (* Operators *)
+  | Plus
+  | PlusEqual
+  | PlusPlus
+  | Minus
+  | MinusEqual
+  | MinusMinus
+  | Arrow
+  | Star
+  | StarEqual
+  | Slash
+  | SlashEqual
+  | Percent
+  | PercentEqual
+  | Equal
+  | EqualEqual
+  | Bang
+  | BangEqual
+  | Less
+  | LessEqual
+  | LessLess
+  | LessLessEqual
+  | Greater
+  | GreaterEqual
+  | GreaterGreater
+  | GreaterGreaterEqual
+  | And
+  | AndEqual
+  | AndAnd
+  | Or
+  | OrEqual
+  | OrOr
+  | Caret
+  | CaretEqual
+  | Tilde
+  (* Punctuation *)
+  | LeftParen
+  | RightParen
+  | LeftBrace
+  | RightBrace
+  | LeftBracket
+  | RightBracket
+  | Colon
+  | Comma
+  | Ellipses
+  | Hash
+  | HashHash
+  | Semicolon
+  | Period
+  | Question
+  (* Implementation *)
+  | NewLine
+  | Eof
+  | Invalid
+
 type kind =
   (* Preprocessing *)
   | HeaderName of header_name
@@ -145,6 +259,121 @@ type t = {
   loc : Source.loc;
   is_at_line_start : bool;
 }
+
+let tag_of_kind (kind : kind) : kind_tag =
+  match kind with
+  (* Preprocessing *)
+  | HeaderName _ -> HeaderName
+  | PPIdentifier _ -> PPIdentifier
+  | PPNumber _ -> PPNumber
+  | PPChar _ -> PPChar
+  | PPString _ -> PPString
+  (* Keywords *)
+  | Auto -> Auto
+  | Break -> Break
+  | Case -> Case
+  | Char -> Char
+  | Const -> Const
+  | Continue -> Continue
+  | Default -> Default
+  | Do -> Do
+  | Double -> Double
+  | Else -> Else
+  | Enum -> Enum
+  | Extern -> Extern
+  | Float -> Float
+  | For -> For
+  | Goto -> Goto
+  | If -> If
+  | Inline -> Inline
+  | Int -> Int
+  | Long -> Long
+  | Register -> Register
+  | Restrict -> Restrict
+  | Return -> Return
+  | Short -> Short
+  | Signed -> Signed
+  | Sizeof -> Sizeof
+  | Static -> Static
+  | Struct -> Struct
+  | Switch -> Switch
+  | Typedef -> Typedef
+  | Union -> Union
+  | Unsigned -> Unsigned
+  | Void -> Void
+  | Volatile -> Volatile
+  | While -> While
+  (* _Keywords *)
+  | Alignas -> Alignas
+  | Alignof -> Alignof
+  | Atomic -> Atomic
+  | Bool -> Bool
+  | Complex -> Complex
+  | Generic -> Generic
+  | Imaginary -> Imaginary
+  | NoReturn -> NoReturn
+  | StaticAssert -> StaticAssert
+  | ThreadLocal -> ThreadLocal
+  (* Identifiers and literals *)
+  | Identifier _ -> Identifier
+  | CharLiteral _ -> CharLiteral
+  | IntLiteral _ -> IntLiteral
+  | FloatLiteral _ -> FloatLiteral
+  | StringLiteral _ -> StringLiteral
+  (* Operators *)
+  | Plus -> Plus
+  | PlusEqual -> PlusEqual
+  | PlusPlus -> PlusPlus
+  | Minus -> Minus
+  | MinusEqual -> MinusEqual
+  | MinusMinus -> MinusMinus
+  | Arrow -> Arrow
+  | Star -> Star
+  | StarEqual -> StarEqual
+  | Slash -> Slash
+  | SlashEqual -> SlashEqual
+  | Percent -> Percent
+  | PercentEqual -> PercentEqual
+  | Equal -> Equal
+  | EqualEqual -> EqualEqual
+  | Bang -> Bang
+  | BangEqual -> BangEqual
+  | Less -> Less
+  | LessEqual -> LessEqual
+  | LessLess -> LessLess
+  | LessLessEqual -> LessLessEqual
+  | Greater -> Greater
+  | GreaterEqual -> GreaterEqual
+  | GreaterGreater -> GreaterGreater
+  | GreaterGreaterEqual -> GreaterGreaterEqual
+  | And -> And
+  | AndEqual -> AndEqual
+  | AndAnd -> AndAnd
+  | Or -> Or
+  | OrEqual -> OrEqual
+  | OrOr -> OrOr
+  | Caret -> Caret
+  | CaretEqual -> CaretEqual
+  | Tilde -> Tilde
+  (* Punctuation *)
+  | LeftParen -> LeftParen
+  | RightParen -> RightParen
+  | LeftBrace -> LeftBrace
+  | RightBrace -> RightBrace
+  | LeftBracket -> LeftBracket
+  | RightBracket -> RightBracket
+  | Colon -> Colon
+  | Comma -> Comma
+  | Ellipses -> Ellipses
+  | Hash -> Hash
+  | HashHash -> HashHash
+  | Semicolon -> Semicolon
+  | Period -> Period
+  | Question -> Question
+  (* Implementation *)
+  | NewLine -> NewLine
+  | Eof -> Eof
+  | Invalid _ -> Invalid
 
 let pp_string ~(escaped : bool) (fmt : Format.formatter) (s : string) : unit =
   if escaped then Format.fprintf fmt "%S" s else Format.fprintf fmt "%s" s

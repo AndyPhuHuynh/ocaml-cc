@@ -25,6 +25,120 @@ type invalid =
   | UnterminatedStringLiteral
   | InvalidChar of char
 
+type kind_tag =
+  (* Preprocessing *)
+  | HeaderName
+  | PPIdentifier
+  | PPNumber
+  | PPChar
+  | PPString
+  (* Keywords *)
+  | Auto
+  | Break
+  | Case
+  | Char
+  | Const
+  | Continue
+  | Default
+  | Do
+  | Double
+  | Else
+  | Enum
+  | Extern
+  | Float
+  | For
+  | Goto
+  | If
+  | Inline
+  | Int
+  | Long
+  | Register
+  | Restrict
+  | Return
+  | Short
+  | Signed
+  | Sizeof
+  | Static
+  | Struct
+  | Switch
+  | Typedef
+  | Union
+  | Unsigned
+  | Void
+  | Volatile
+  | While
+  (* _Keywords *)
+  | Alignas
+  | Alignof
+  | Atomic
+  | Bool
+  | Complex
+  | Generic
+  | Imaginary
+  | NoReturn
+  | StaticAssert
+  | ThreadLocal
+  (* Identifiers and literals *)
+  | Identifier
+  | CharLiteral
+  | IntLiteral
+  | FloatLiteral
+  | StringLiteral
+  (* Operators *)
+  | Plus
+  | PlusEqual
+  | PlusPlus
+  | Minus
+  | MinusEqual
+  | MinusMinus
+  | Arrow
+  | Star
+  | StarEqual
+  | Slash
+  | SlashEqual
+  | Percent
+  | PercentEqual
+  | Equal
+  | EqualEqual
+  | Bang
+  | BangEqual
+  | Less
+  | LessEqual
+  | LessLess
+  | LessLessEqual
+  | Greater
+  | GreaterEqual
+  | GreaterGreater
+  | GreaterGreaterEqual
+  | And
+  | AndEqual
+  | AndAnd
+  | Or
+  | OrEqual
+  | OrOr
+  | Caret
+  | CaretEqual
+  | Tilde
+  (* Punctuation *)
+  | LeftParen
+  | RightParen
+  | LeftBrace
+  | RightBrace
+  | LeftBracket
+  | RightBracket
+  | Colon
+  | Comma
+  | Ellipses
+  | Hash
+  | HashHash
+  | Semicolon
+  | Period
+  | Question
+  (* Implementation *)
+  | NewLine
+  | Eof
+  | Invalid
+
 type kind =
   (* Preprocessing *)
   | HeaderName of header_name
@@ -146,6 +260,7 @@ type t = {
   is_at_line_start : bool;
 }
 
+val tag_of_kind : kind -> kind_tag
 val pp_header_type : Format.formatter -> header_type -> unit
 val pp_kind_name : ?escaped:bool -> Format.formatter -> kind -> unit
 

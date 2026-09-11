@@ -49,10 +49,6 @@ let at_index (lexer : t) : char option =
   if is_at_end lexer then None
   else Some lexer.source.contents.[lexer.position.index]
 
-(* let at_index_utf8 (lexer : t) : Uchar.t option = *)
-(*   if is_at_end lexer then None *)
-(*   else Some lexer.source.contents.[lexer.position.index] *)
-
 let advance_index (lexer : t) : t =
   match at_index lexer with
   | None -> lexer
