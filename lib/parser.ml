@@ -55,6 +55,25 @@ let expect_identifier (parser : t) (message : string) :
     (fun kind -> match kind with Identifier s -> Some s | _ -> None)
     message
 
+(* ------------------ *)
+(* Diagnostic helpers *)
+(* ------------------ *)
+
+let diagnostics_emit_warning (parser : t) (diag : Diagnostics.t) =
+  Diagnostics.emit_warning parser.diagnostics diag
+
+let diagnostics_emit_error (parser : t) (diag : Diagnostics.t) =
+  Diagnostics.emit_error parser.diagnostics diag
+
+let diagnostics_from_token (parser : t) (token : Token.t) (message : string) :
+    Diagnostics.t =
+  Diagnostics.from_span
+    (get_source parser token.span.source_id)
+    token.span message
+(* ------------------ *)
+(* Parse declarations *)
+(* ------------------ *)
+
 let parse_declaration_specifiers (parser : t) : Syntax.declaration_specifiers =
   let rec helper (parser : t) (acc : Syntax.declaration_specifiers) :
       Syntax.declaration_specifiers =
@@ -91,27 +110,27 @@ let parse_declaration_specifiers (parser : t) : Syntax.declaration_specifiers =
   in
   Syntax.reverse_specs (helper parser Syntax.empty_declaration_specifiers)
 
-let analyze_object_storage_classes (parser : t)
+let analyze_storage_classes (parser : t)
     (specs : (Syntax.storage_class_specifier * Token.t) list) :
-    Ast.object_storage =
+    (Syntax.storage_class_specifier * Token.t) option
+    * (Syntax.storage_class_specifier * Token.t) option =
   let module SpecSet = Set.Make (struct
     type t = Syntax.storage_class_specifier
 
     let compare = Stdlib.compare
   end) in
-  let rec validate (first_spec : Syntax.storage_class_specifier option)
-      (compatible_spec : Syntax.storage_class_specifier option)
+  let rec validate
+      (first_spec : (Syntax.storage_class_specifier * Token.t) option)
+      (compatible_spec : (Syntax.storage_class_specifier * Token.t) option)
       (encountered : SpecSet.t)
       (specs : (Syntax.storage_class_specifier * Token.t) list) :
-      Syntax.storage_class_specifier option
-      * Syntax.storage_class_specifier option =
+      (Syntax.storage_class_specifier * Token.t) option
+      * (Syntax.storage_class_specifier * Token.t) option =
     let check_duplicate (spec : Syntax.storage_class_specifier)
         (token : Token.t) : unit =
       if SpecSet.mem spec encountered then begin
-        Diagnostics.emit_warning parser.diagnostics
-          (Diagnostics.from_span
-             (get_source parser token.span.source_id)
-             token.span
+        diagnostics_emit_warning parser
+          (diagnostics_from_token parser token
              (Printf.sprintf
                 "duplicate '%s' declaration specifier \
                  [-Wduplicate-decl-specifier]"
@@ -130,10 +149,8 @@ let analyze_object_storage_classes (parser : t)
         || (first_spec = Extern && current_spec = ThreadLocal)
       then true
       else begin
-        Diagnostics.emit_error parser.diagnostics
-          (Diagnostics.from_span
-             (get_source parser current_token.span.source_id)
-             current_token.span
+        diagnostics_emit_error parser
+          (diagnostics_from_token parser current_token
              (Printf.sprintf
                 "cannot combine '%s' with previous '%s' declaration specifier"
                 (Syntax.string_of_storage_class_specifier current_spec)
@@ -148,29 +165,38 @@ let analyze_object_storage_classes (parser : t)
         begin match first_spec with
         | None -> begin
             check_duplicate spec token;
-            validate (Some spec) None (SpecSet.add spec encountered) xs
+            validate (Some (spec, token)) None (SpecSet.add spec encountered) xs
           end
-        | Some first -> begin
+        | Some (first_spec, first_token) -> begin
             check_duplicate spec token;
-            match check_valid_combo first spec token with
+            match check_valid_combo first_spec spec token with
             | false ->
-                validate first_spec compatible_spec
+                validate
+                  (Some (first_spec, first_token))
+                  compatible_spec
                   (SpecSet.add spec encountered)
                   xs
             | true ->
-                validate (Some first) (Some spec)
+                validate
+                  (Some (first_spec, first_token))
+                  (Some (spec, token))
                   (SpecSet.add spec encountered)
                   xs
           end
         end
   in
-  match validate None None SpecSet.empty specs with
+  validate None None SpecSet.empty specs
+
+let analyze_object_storage_classes (parser : t)
+    (specs : (Syntax.storage_class_specifier * Token.t) list) :
+    Ast.object_storage =
+  match analyze_storage_classes parser specs with
   | None, None -> NoStorage
   | None, Some _ ->
       failwith
-        "internal error: analyze_object_storage_class has initial storage \
+        "internal error: analyze_object_storage_class has no initial storage \
          class, but a compatible one was given"
-  | Some spec, None ->
+  | Some (spec, _), None ->
       begin match spec with
       | Typedef ->
           failwith
@@ -182,7 +208,8 @@ let analyze_object_storage_classes (parser : t)
       | Auto -> Auto
       | Register -> Register
       end
-  | Some ThreadLocal, Some spec | Some spec, Some ThreadLocal ->
+  | Some (ThreadLocal, _), Some (spec, token)
+  | Some (spec, token), Some (ThreadLocal, _) ->
       begin match spec with
       | Extern -> ThreadLocalExtern
       | Static -> ThreadLocalStatic
@@ -199,13 +226,92 @@ let analyze_object_storage_classes (parser : t)
         (Printf.sprintf
            "internal error: invalid storage class specifier combo: '%s' and \
             '%s'"
-           (Syntax.string_of_storage_class_specifier first)
-           (Syntax.string_of_storage_class_specifier second))
+           (Syntax.string_of_storage_class_specifier (fst first))
+           (Syntax.string_of_storage_class_specifier (fst second)))
+
+let analyze_function_storage_classes (parser : t)
+    (specs : (Syntax.storage_class_specifier * Token.t) list) :
+    Ast.function_storage =
+  let emit_storage_class_error (spec : Syntax.storage_class_specifier)
+      (token : Token.t) : unit =
+    diagnostics_emit_error parser
+      (diagnostics_from_token parser token
+         (Printf.sprintf
+            "storage class specifier '%s' is not allowed on a function; must \
+             be extern or static"
+            (Syntax.string_of_storage_class_specifier spec)))
+  in
+
+  match analyze_storage_classes parser specs with
+  | None, None -> NoStorage
+  | None, Some _ ->
+      failwith
+        "internal error: analyze_function_storage_class has no initial storage \
+         class, but a compatible one was given"
+  | Some (Extern, _), None -> Extern
+  | Some (Static, _), None -> Static
+  | Some (ThreadLocal, _), Some (spec, token)
+  | Some (spec, token), Some (ThreadLocal, _) ->
+      begin match spec with
+      | Extern ->
+          emit_storage_class_error ThreadLocal token;
+          Extern
+      | Static ->
+          emit_storage_class_error ThreadLocal token;
+          Static
+      | _ ->
+          failwith
+            (Printf.sprintf
+               "internal error: invalid storage class specifier combo: '%s' \
+                and '%s'"
+               (Syntax.string_of_storage_class_specifier spec)
+               (Syntax.string_of_storage_class_specifier ThreadLocal))
+      end
+  | Some (spec, token), None ->
+      begin match spec with
+      | Typedef ->
+          failwith
+            "internal error: analyze_function_storage_class should not be \
+             called with typedef as the first specifier"
+      | _ ->
+          emit_storage_class_error spec token;
+          NoStorage
+      end
+  | Some first, Some second ->
+      failwith
+        (Printf.sprintf
+           "internal error: invalid storage class specifier combo: '%s' and \
+            '%s'"
+           (Syntax.string_of_storage_class_specifier (fst first))
+           (Syntax.string_of_storage_class_specifier (fst second)))
+
+let analyze_typedef_storage_classes (parser : t)
+    (specs : (Syntax.storage_class_specifier * Token.t) list) : unit =
+  let get_spec_string (spec : (Syntax.storage_class_specifier * Token.t) option)
+      : string =
+    match spec with
+    | None -> "None"
+    | Some x -> Syntax.string_of_storage_class_specifier (fst x)
+  in
+
+  match analyze_storage_classes parser specs with
+  | Some (Typedef, _), None -> ()
+  | None, Some _ ->
+      failwith
+        "internal error: analyze_typedef_storage_class has no initial storage \
+         class, but a compatible one was given"
+  | spec1, spec2 ->
+      failwith
+        (Printf.sprintf
+           "internal error: analyze_typedef_storage_class invalid storage \
+            class specifier configuration: (%s, %s)"
+           (get_spec_string spec1) (get_spec_string spec2))
 
 let parse_declaration (parser : t) : Ast.declaration parse_state_result =
   let declaration_specifiers = parse_declaration_specifiers parser in
   let _ =
-    analyze_object_storage_classes parser declaration_specifiers.storage_classes
+    analyze_function_storage_classes parser
+      declaration_specifiers.storage_classes
   in
 
   (* let* parser, _ = expect parser Token.Int "int return type expected" in *)
