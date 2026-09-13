@@ -42,6 +42,12 @@ let string_of_storage_class_specifier (spec : storage_class_specifier) : string
   | Auto -> "auto"
   | Register -> "register"
 
+let string_of_type_qualifier (spec : type_qualifier) : string =
+  match spec with
+  | Const -> "Const"
+  | Restrict -> "Restrict"
+  | Volatile -> "Volatile"
+
 let empty_declaration_specifiers : declaration_specifiers =
   {
     storage_classes = [];

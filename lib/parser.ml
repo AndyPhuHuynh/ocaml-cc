@@ -307,11 +307,61 @@ let analyze_typedef_storage_classes (parser : t)
             class specifier configuration: (%s, %s)"
            (get_spec_string spec1) (get_spec_string spec2))
 
+let analyze_type_qualifiers (parser : t)
+    (specs : (Syntax.type_qualifier * Token.t) list) : Ast.type_qualifiers =
+  let warn_duplicate (spec : Syntax.type_qualifier) (token : Token.t) : unit =
+    diagnostics_emit_warning parser
+      (diagnostics_from_token parser token
+         (Printf.sprintf
+            "duplicate '%s' declaration specifier [-Wduplicate-decl-specifier]"
+            (Syntax.string_of_type_qualifier spec)))
+  in
+
+  let rec helper (specs : (Syntax.type_qualifier * Token.t) list)
+      (acc : Ast.type_qualifiers) : Ast.type_qualifiers =
+    match specs with
+    | [] -> acc
+    | (spec, token) :: xs ->
+        begin match spec with
+        | Const ->
+            begin if acc.const then begin
+              warn_duplicate spec token;
+              helper xs acc
+            end
+            else begin
+              helper xs { acc with const = true }
+            end
+            end
+        | Restrict ->
+            begin if acc.restrict then begin
+              warn_duplicate spec token;
+              helper xs acc
+            end
+            else begin
+              helper xs { acc with restrict = true }
+            end
+            end
+        | Volatile ->
+            begin if acc.volatile then begin
+              warn_duplicate spec token;
+              helper xs acc
+            end
+            else begin
+              helper xs { acc with volatile = true }
+            end
+            end
+        end
+  in
+  helper specs { const = false; restrict = false; volatile = false }
+
 let parse_declaration (parser : t) : Ast.declaration parse_state_result =
   let declaration_specifiers = parse_declaration_specifiers parser in
   let _ =
     analyze_function_storage_classes parser
       declaration_specifiers.storage_classes
+  in
+  let _ =
+    analyze_type_qualifiers parser declaration_specifiers.type_qualifiers
   in
 
   (* let* parser, _ = expect parser Token.Int "int return type expected" in *)
@@ -319,7 +369,15 @@ let parse_declaration (parser : t) : Ast.declaration parse_state_result =
   (*   expect parser Token.Identifier "identifer name expected" *)
   (* in *)
   let ast : Ast.declaration =
-    FunctionDeclaration { return_type = Int; name = "main" }
+    FunctionDeclaration
+      {
+        return_type =
+          {
+            qualifiers = { const = false; restrict = false; volatile = false };
+            kind = Int;
+          };
+        name = "main";
+      }
   in
   Ok (parser, ast)
 

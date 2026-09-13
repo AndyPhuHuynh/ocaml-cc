@@ -28,6 +28,7 @@ type declaration_specifiers = {
 }
 
 val string_of_storage_class_specifier : storage_class_specifier -> string
+val string_of_type_qualifier : type_qualifier -> string
 val empty_declaration_specifiers : declaration_specifiers
 val reverse_specs : declaration_specifiers -> declaration_specifiers
 

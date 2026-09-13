@@ -20,8 +20,14 @@ type object_storage =
   | Register
 
 type function_storage = NoStorage | Extern | Static
-type type_ = Int
-type function_declaration = { return_type : type_; name : string }
+
+(**)
+type type_qualifiers = { const : bool; restrict : bool; volatile : bool }
+type type_kind = Int
+type c_type = { qualifiers : type_qualifiers; kind : type_kind }
+
+(**)
+type function_declaration = { return_type : c_type; name : string }
 
 type function_definition = {
   declaration : function_declaration;
