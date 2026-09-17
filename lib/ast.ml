@@ -20,11 +20,17 @@ type object_storage =
   | Register
 
 type function_storage = NoStorage | Extern | Static
-
-(**)
 type type_qualifiers = { const : bool; restrict : bool; volatile : bool }
-type type_kind = Int
-type c_type = { qualifiers : type_qualifiers; kind : type_kind }
+
+let type_qualifiers_empty =
+  { const = false; restrict = false; volatile = false }
+
+type c_type_kind = Int | Pointer of c_type
+and c_type = { qualifiers : type_qualifiers; kind : c_type_kind }
+
+type function_specifiers = { inline : bool; no_return : bool }
+
+let function_specifiers_empty = { inline = false; no_return = false }
 
 (**)
 type function_declaration = { return_type : c_type; name : string }
@@ -35,6 +41,7 @@ type function_definition = {
 }
 
 type declaration = FunctionDeclaration of function_declaration
+(* TODO: static assert declaration *)
 
 type external_declaration =
   | FunctionDefinition of function_definition

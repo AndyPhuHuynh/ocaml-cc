@@ -12,6 +12,7 @@
    ocaml
    dune
    uucp
+   ppx-deriving
    zarith
    (ppx_expect :with-test)))
 

@@ -18,6 +18,10 @@ type type_specifier =
   | Unsigned
 
 type type_qualifier = Const | Restrict | Volatile
+
+type type_qualifiers = { const : bool; restrict : bool; volatile : bool }
+[@@deriving show]
+
 type function_specifier = Inline | NoReturn
 
 type declaration_specifiers = {
@@ -27,8 +31,31 @@ type declaration_specifiers = {
   func_specifiers : (function_specifier * Token.t) list;
 }
 
+type array_size = None | Size of Token.int_literal | Star [@@deriving show]
+
+type declarator = {
+  pointers : type_qualifiers list;
+  direct_decl : direct_declarator;
+}
+[@@deriving show]
+
+and direct_declarator =
+  | Identifier of { name : string; info : Token.info }
+  | Array of {
+      decl : direct_declarator;
+      size : array_size;
+      type_qualifiers : type_qualifiers;
+      is_static : bool;
+    }
+[@@deriving show]
+
+(**)
 val string_of_storage_class_specifier : storage_class_specifier -> string
 val string_of_type_qualifier : type_qualifier -> string
+val string_of_function_specifier : function_specifier -> string
+
+(**)
+val empty_type_qualifiers : type_qualifiers
 val empty_declaration_specifiers : declaration_specifiers
 val reverse_specs : declaration_specifiers -> declaration_specifiers
 

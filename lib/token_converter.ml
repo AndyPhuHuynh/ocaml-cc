@@ -716,7 +716,7 @@ let convert_pp_number (s : string) : Token.kind * pp_number_error_proto option =
 
 let convert_token (diagnostics : Diagnostics.engine) (manager : Source.manager)
     (token : Token.t) : Token.t * bool =
-  let source_id = token.span.source_id in
+  let source_id = token.info.span.source_id in
   let source = Source.get_source manager source_id in
 
   match token.kind with

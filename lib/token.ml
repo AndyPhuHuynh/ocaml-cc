@@ -2,16 +2,26 @@ type header_type = Local | NonLocal
 type header_name = { filepath : string; type_ : header_type }
 
 (**)
-type pp_char_prefix = None | Utf16 | Utf32 | WChar
-type pp_char = { prefix : pp_char_prefix; contents : Source.string_src }
+type preprocess_char_prefix = NoPrefix | Utf16 | Utf32 | WChar
+
+type preprocess_char = {
+  prefix : preprocess_char_prefix;
+  contents : Source.string_src;
+}
 
 (**)
-type pp_string_prefix = None | Utf8 | Utf16 | Utf32 | WChar
-type pp_string = { prefix : pp_string_prefix; contents : Source.string_src }
+type preprocess_string_prefix = NoPrefix | Utf8 | Utf16 | Utf32 | WChar
+
+type preprocess_string = {
+  prefix : preprocess_string_prefix;
+  contents : Source.string_src;
+}
 
 (**)
-type int_suffix = U | L | UL | LL | ULL
-type int_literal = { value : Z.t; suffix : int_suffix option }
+type int_suffix = U | L | UL | LL | ULL [@@deriving show]
+
+type int_literal = { value : Bigint.t; suffix : int_suffix option }
+[@@deriving show]
 
 (**)
 type float_suffix = F | L
@@ -144,8 +154,8 @@ type kind =
   | HeaderName of header_name
   | PPIdentifier of Source.string_src
   | PPNumber of Source.string_src
-  | PPChar of pp_char
-  | PPString of pp_string
+  | PPChar of preprocess_char
+  | PPString of preprocess_string
   (* Keywords *)
   | Auto
   | Break
@@ -253,12 +263,10 @@ type kind =
   | Eof
   | Invalid of invalid
 
-type t = {
-  kind : kind;
-  span : Source.span;
-  loc : Source.loc;
-  is_at_line_start : bool;
-}
+type info = { span : Source.span; loc : Source.loc; is_at_line_start : bool }
+[@@deriving show]
+
+type t = { kind : kind; info : info }
 
 let tag_of_kind (kind : kind) : kind_tag =
   match kind with
@@ -530,22 +538,22 @@ let pp_kind_name ?(escaped : bool = true) (fmt : Format.formatter) (kind : kind)
           Format.fprintf fmt "InvalidCharacter(%S)" (String.make 1 c)
       end
 
-let pp_pp_char_prefix (fmt : Format.formatter) (prefix : pp_char_prefix) : unit
-    =
+let print_preprocess_char_prefix (fmt : Format.formatter)
+    (prefix : preprocess_char_prefix) : unit =
   let prefix_str =
     match prefix with
-    | None -> "None"
+    | NoPrefix -> "None"
     | Utf16 -> "Utf16"
     | Utf32 -> "Utf32"
     | WChar -> "Wchar"
   in
   Format.fprintf fmt "%-6s" prefix_str
 
-let pp_pp_string_prefix (fmt : Format.formatter) (prefix : pp_string_prefix) :
-    unit =
+let print_preprocessor_string_prefix (fmt : Format.formatter)
+    (prefix : preprocess_string_prefix) : unit =
   let prefix_str =
     match prefix with
-    | None -> "None"
+    | NoPrefix -> "None"
     | Utf8 -> "Utf8"
     | Utf16 -> "Utf16"
     | Utf32 -> "Utf32"
@@ -553,7 +561,7 @@ let pp_pp_string_prefix (fmt : Format.formatter) (prefix : pp_string_prefix) :
   in
   Format.fprintf fmt "%-6s" prefix_str
 
-let pp_int_suffix_opt (fmt : Format.formatter) (suffix : int_suffix option) :
+let print_int_suffix_opt (fmt : Format.formatter) (suffix : int_suffix option) :
     unit =
   let suffix_str =
     match suffix with
@@ -576,11 +584,11 @@ let pp_float_suffix_opt (fmt : Format.formatter) (suffix : float_suffix option)
 let pp_kind_fields_compact (fmt : Format.formatter) (kind : kind) : unit =
   match kind with
   | PPChar { prefix } ->
-      Format.fprintf fmt "prefix: %a" pp_pp_char_prefix prefix
+      Format.fprintf fmt "prefix: %a" print_preprocess_char_prefix prefix
   | PPString { prefix } ->
-      Format.fprintf fmt "prefix: %a" pp_pp_string_prefix prefix
+      Format.fprintf fmt "prefix: %a" print_preprocessor_string_prefix prefix
   | IntLiteral { suffix; _ } ->
-      Format.fprintf fmt "suffix: %a" pp_int_suffix_opt suffix
+      Format.fprintf fmt "suffix: %a" print_int_suffix_opt suffix
   | FloatLiteral { suffix; _ } ->
       Format.fprintf fmt "suffix: %a" pp_float_suffix_opt suffix
   | _ -> ()
@@ -600,13 +608,14 @@ let pp_kind_fields_verbose (fmt : Format.formatter) (kind : kind) =
       Format.fprintf fmt "@,type: %a" pp_header_type type_
   | PPNumber value -> pp_splices_list fmt value.positions
   | PPChar value ->
-      Format.fprintf fmt "prefix: %a" pp_pp_char_prefix value.prefix;
+      Format.fprintf fmt "prefix: %a" print_preprocess_char_prefix value.prefix;
       Format.fprintf fmt "@,%a" pp_splices_list value.contents.positions
   | PPString value ->
-      Format.fprintf fmt "prefix: %a" pp_pp_string_prefix value.prefix;
+      Format.fprintf fmt "prefix: %a" print_preprocessor_string_prefix
+        value.prefix;
       Format.fprintf fmt "@,%a" pp_splices_list value.contents.positions
   | IntLiteral { suffix; _ } ->
-      Format.fprintf fmt "suffix: %a" pp_int_suffix_opt suffix
+      Format.fprintf fmt "suffix: %a" print_int_suffix_opt suffix
   | FloatLiteral { suffix; _ } ->
       Format.fprintf fmt "suffix: %a" pp_float_suffix_opt suffix
   | _ -> ()
@@ -629,7 +638,8 @@ let should_print_lexeme (kind : kind) : bool =
 let pp_compact ?(escaped : bool = true) (manager : Source.manager)
     (fmt : Format.formatter) (token : t) : unit =
   let kind_str = Format.asprintf "%a" (pp_kind_name ~escaped) token.kind in
-  Format.fprintf fmt "%2d:%-3d %-22s  " token.loc.line token.loc.col kind_str;
+  Format.fprintf fmt "%2d:%-3d %-22s  " token.info.loc.line token.info.loc.col
+    kind_str;
 
   if has_fields token.kind then begin
     Format.fprintf fmt "%a" pp_kind_fields_compact token.kind
@@ -638,7 +648,7 @@ let pp_compact ?(escaped : bool = true) (manager : Source.manager)
   if should_print_lexeme token.kind then begin
     Format.fprintf fmt "lexeme=%a"
       (pp_string_len ~escaped ~padding:20)
-      (Source.span_to_string token.span manager)
+      (Source.span_to_string token.info.span manager)
   end
 
 let pp_verbose ?(escaped : bool = true) (manager : Source.manager)
@@ -646,7 +656,7 @@ let pp_verbose ?(escaped : bool = true) (manager : Source.manager)
   Format.fprintf fmt "@[<v 2>";
 
   Format.fprintf fmt "%a" (pp_kind_name ~escaped) token.kind;
-  Format.fprintf fmt "@,loc: %d:%d" token.loc.line token.loc.col;
+  Format.fprintf fmt "@,loc: %d:%d" token.info.loc.line token.info.loc.col;
 
   if has_fields token.kind then begin
     Format.fprintf fmt "@,%a" pp_kind_fields_verbose token.kind
@@ -655,7 +665,7 @@ let pp_verbose ?(escaped : bool = true) (manager : Source.manager)
   if should_print_lexeme token.kind then begin
     Format.fprintf fmt "@,lexeme: %a"
       (pp_string_len ~escaped ~padding:20)
-      (Source.span_to_string token.span manager)
+      (Source.span_to_string token.info.span manager)
   end;
 
   Format.fprintf fmt "@]"

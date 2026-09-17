@@ -67,54 +67,56 @@ let emit_single_caret (source : Source.t) (loc : Source.loc) =
 
 let emit_multi_caret (source : Source.t) (start_loc : Source.loc)
     (end_loc : Source.loc) =
-  if not (Source.is_loc_after end_loc start_loc) then begin
+  if start_loc = end_loc then emit_single_caret source start_loc
+  else if not (Source.is_loc_after end_loc start_loc) then begin
     failwith
       (Printf.sprintf "Invalid highlight range: Start(%d:%d) End(%d:%d)"
          start_loc.line start_loc.col end_loc.line end_loc.col)
-  end;
-
-  if end_loc.line = start_loc.line then begin
-    let line = Source.get_line source start_loc.line in
-    let line_num_padding = 5 in
-
-    emit_line start_loc.line line_num_padding line;
-    Printf.eprintf "%s | %s%s%s\n"
-      (String.make line_num_padding ' ')
-      (String.make (start_loc.col - 1) ' ')
-      (Color.bold_green "^")
-      (Color.bold_green (String.make (end_loc.col - start_loc.col) '~'))
   end
-  else begin
-    let start_line = Source.get_line source start_loc.line in
-    let line_num_padding = 5 in
+  else
+    begin if end_loc.line = start_loc.line then begin
+      let line = Source.get_line source start_loc.line in
+      let line_num_padding = 5 in
 
-    emit_line start_loc.line line_num_padding start_line;
-    Printf.eprintf "%s | %s%s%s\n"
-      (String.make line_num_padding ' ')
-      (String.make (start_loc.col - 1) ' ')
-      (Color.bold_green "^")
-      (Color.bold_green
-         (String.make (String.length start_line - start_loc.col) '~'));
+      emit_line start_loc.line line_num_padding line;
+      Printf.eprintf "%s | %s%s%s\n"
+        (String.make line_num_padding ' ')
+        (String.make (start_loc.col - 1) ' ')
+        (Color.bold_green "^")
+        (Color.bold_green (String.make (end_loc.col - start_loc.col) '~'))
+    end
+    else begin
+      let start_line = Source.get_line source start_loc.line in
+      let line_num_padding = 5 in
 
-    let print_middle_lines (line_num : int) : unit =
-      if line_num >= end_loc.line then ()
-      else begin
-        let line = Source.get_line source line_num in
-        emit_line line_num line_num_padding line;
-        Printf.eprintf "%s | %s\n"
-          (String.make line_num_padding ' ')
-          (Color.bold_green (String.make (String.length line) '~'))
-      end
-    in
+      emit_line start_loc.line line_num_padding start_line;
+      Printf.eprintf "%s | %s%s%s\n"
+        (String.make line_num_padding ' ')
+        (String.make (start_loc.col - 1) ' ')
+        (Color.bold_green "^")
+        (Color.bold_green
+           (String.make (String.length start_line - start_loc.col) '~'));
 
-    print_middle_lines (start_loc.line + 1);
+      let print_middle_lines (line_num : int) : unit =
+        if line_num >= end_loc.line then ()
+        else begin
+          let line = Source.get_line source line_num in
+          emit_line line_num line_num_padding line;
+          Printf.eprintf "%s | %s\n"
+            (String.make line_num_padding ' ')
+            (Color.bold_green (String.make (String.length line) '~'))
+        end
+      in
 
-    let end_line = Source.get_line source end_loc.line in
-    emit_line end_loc.line line_num_padding end_line;
-    Printf.eprintf "%s | %s\n"
-      (String.make line_num_padding ' ')
-      (Color.bold_green (String.make end_loc.col '~'))
-  end
+      print_middle_lines (start_loc.line + 1);
+
+      let end_line = Source.get_line source end_loc.line in
+      emit_line end_loc.line line_num_padding end_line;
+      Printf.eprintf "%s | %s\n"
+        (String.make line_num_padding ' ')
+        (Color.bold_green (String.make end_loc.col '~'))
+    end
+    end
 
 let emit_diagnostic (engine : engine) (severity : string) (diag : t) : unit =
   if not engine.include_stack_printed then begin

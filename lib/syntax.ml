@@ -21,6 +21,9 @@ type type_specifier =
 type type_qualifier = Const | Restrict | Volatile
 (* TODO: atomic *)
 
+type type_qualifiers = { const : bool; restrict : bool; volatile : bool }
+[@@deriving show]
+
 type function_specifier = Inline | NoReturn
 
 (* TODO: aligment specifiers *)
@@ -31,6 +34,24 @@ type declaration_specifiers = {
   type_qualifiers : (type_qualifier * Token.t) list;
   func_specifiers : (function_specifier * Token.t) list;
 }
+
+type array_size = None | Size of Token.int_literal | Star [@@deriving show]
+
+type declarator = {
+  pointers : type_qualifiers list;
+  direct_decl : direct_declarator;
+}
+[@@deriving show]
+
+and direct_declarator =
+  | Identifier of { name : string; info : Token.info }
+  | Array of {
+      decl : direct_declarator;
+      size : array_size;
+      type_qualifiers : type_qualifiers;
+      is_static : bool;
+    }
+[@@deriving show]
 
 let string_of_storage_class_specifier (spec : storage_class_specifier) : string
     =
@@ -47,6 +68,12 @@ let string_of_type_qualifier (spec : type_qualifier) : string =
   | Const -> "Const"
   | Restrict -> "Restrict"
   | Volatile -> "Volatile"
+
+let string_of_function_specifier (spec : function_specifier) : string =
+  match spec with Inline -> "inline" | NoReturn -> "_Noreturn"
+
+let empty_type_qualifiers : type_qualifiers =
+  { const = false; restrict = false; volatile = false }
 
 let empty_declaration_specifiers : declaration_specifiers =
   {

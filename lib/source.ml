@@ -5,10 +5,10 @@ type t = {
   line_offsets : int array;
 }
 
-type id = int
-type loc = { line : int; col : int }
+type id = int [@@deriving show]
+type loc = { line : int; col : int } [@@deriving show]
 type pos = { index : int; loc : loc }
-type span = { source_id : id; start : int; length : int }
+type span = { source_id : id; start : int; length : int } [@@deriving show]
 type string_pos = { index : int; loc : loc }
 type string_src = { string : string; positions : string_pos list }
 

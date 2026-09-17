@@ -6,6 +6,7 @@ depends: [
   "ocaml"
   "dune" {>= "3.24"}
   "uucp"
+  "ppx-deriving"
   "zarith"
   "ppx_expect" {with-test}
   "odoc" {with-doc}

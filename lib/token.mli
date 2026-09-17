@@ -2,16 +2,26 @@ type header_type = Local | NonLocal
 type header_name = { filepath : string; type_ : header_type }
 
 (**)
-type pp_char_prefix = None | Utf16 | Utf32 | WChar
-type pp_char = { prefix : pp_char_prefix; contents : Source.string_src }
+type preprocess_char_prefix = NoPrefix | Utf16 | Utf32 | WChar
+
+type preprocess_char = {
+  prefix : preprocess_char_prefix;
+  contents : Source.string_src;
+}
 
 (**)
-type pp_string_prefix = None | Utf8 | Utf16 | Utf32 | WChar
-type pp_string = { prefix : pp_string_prefix; contents : Source.string_src }
+type preprocess_string_prefix = NoPrefix | Utf8 | Utf16 | Utf32 | WChar
+
+type preprocess_string = {
+  prefix : preprocess_string_prefix;
+  contents : Source.string_src;
+}
 
 (**)
-type int_suffix = U | L | UL | LL | ULL
-type int_literal = { value : Z.t; suffix : int_suffix option }
+type int_suffix = U | L | UL | LL | ULL [@@deriving show]
+
+type int_literal = { value : Bigint.t; suffix : int_suffix option }
+[@@deriving show]
 
 (**)
 type float_suffix = F | L
@@ -144,8 +154,8 @@ type kind =
   | HeaderName of header_name
   | PPIdentifier of Source.string_src
   | PPNumber of Source.string_src
-  | PPChar of pp_char
-  | PPString of pp_string
+  | PPChar of preprocess_char
+  | PPString of preprocess_string
   (* Keywords *)
   | Auto
   | Break
@@ -253,12 +263,10 @@ type kind =
   | Eof
   | Invalid of invalid
 
-type t = {
-  kind : kind;
-  span : Source.span;
-  loc : Source.loc;
-  is_at_line_start : bool;
-}
+type info = { span : Source.span; loc : Source.loc; is_at_line_start : bool }
+[@@deriving show]
+
+type t = { kind : kind; info : info }
 
 val tag_of_kind : kind -> kind_tag
 val pp_header_type : Format.formatter -> header_type -> unit

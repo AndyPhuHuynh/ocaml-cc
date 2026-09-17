@@ -65,7 +65,7 @@ let process_directive_include (pp : t) (include_location : Source.loc) : t =
   match token.kind with
   | HeaderName { filepath = ""; _ } ->
       Diagnostics.emit_error pp.diagnostics
-        (Diagnostics.at (get_current_source pp) token.loc "empty filename");
+        (Diagnostics.at (get_current_source pp) token.info.loc "empty filename");
       skip_line pp
   | HeaderName { filepath; _ } -> begin
       let full_path =
@@ -74,7 +74,7 @@ let process_directive_include (pp : t) (include_location : Source.loc) : t =
 
       if pp.source_stack.size >= 256 then begin
         Diagnostics.emit_fatal_error pp.diagnostics
-          (Diagnostics.at (get_current_source pp) token.loc
+          (Diagnostics.at (get_current_source pp) token.info.loc
              "maximum include depth exceeded")
           1
       end;
@@ -87,17 +87,17 @@ let process_directive_include (pp : t) (include_location : Source.loc) : t =
       | Ok new_pp -> new_pp
       | Error (FileNotFound filepath) ->
           Diagnostics.emit_fatal_error pp.diagnostics
-            (Diagnostics.from_span (get_current_source pp) token.span
+            (Diagnostics.from_span (get_current_source pp) token.info.span
                (Printf.sprintf "'%s' file not found" filepath))
             1
       | Error (IOError msg) ->
           Diagnostics.emit_fatal_error pp.diagnostics
-            (Diagnostics.at (get_current_source pp) token.loc msg)
+            (Diagnostics.at (get_current_source pp) token.info.loc msg)
             1
     end
   | _ -> begin
       Diagnostics.emit_error pp.diagnostics
-        (Diagnostics.at (get_current_source pp) token.loc
+        (Diagnostics.at (get_current_source pp) token.info.loc
            "expected \"FILENAME\" or <FILENAME>");
       skip_line pp
     end
@@ -106,10 +106,10 @@ let rec process_directive_invalid (pp : t) : t =
   let invalid, lexer = lex_current pp in
   let msg =
     Printf.sprintf "invalid preprocessing directive: %s"
-      (Source.span_to_string invalid.span pp.source_manager)
+      (Source.span_to_string invalid.info.span pp.source_manager)
   in
   Diagnostics.emit_error pp.diagnostics
-    (Diagnostics.at (get_current_source pp) invalid.loc msg);
+    (Diagnostics.at (get_current_source pp) invalid.info.loc msg);
   skip_line pp
 
 let process_directive (pp : t) (hash_location : Source.loc) : t =
@@ -147,7 +147,7 @@ let rec next_token (pp : t) : Token.t * t =
       | _ -> next_token (pop_source pp)
       end
   | NewLine -> next_token (update_lexer pp lexer)
-  | Hash when token.is_at_line_start ->
-      let pp = process_directive (update_lexer pp lexer) token.loc in
+  | Hash when token.info.is_at_line_start ->
+      let pp = process_directive (update_lexer pp lexer) token.info.loc in
       next_token pp
   | _ -> (token, update_lexer pp lexer)

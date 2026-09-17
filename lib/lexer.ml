@@ -203,7 +203,10 @@ let make_token (kind : Token.kind) (lexer : t) : Token.t * t =
   let is_at_line_start = lexer.next_token_starts_line in
   let lexer = { lexer with next_token_starts_line = kind = Token.NewLine } in
   let token : Token.t =
-    { kind; span = get_span lexer; loc = lexer.start.loc; is_at_line_start }
+    {
+      kind;
+      info = { span = get_span lexer; loc = lexer.start.loc; is_at_line_start };
+    }
   in
   (token, lexer)
 
@@ -422,7 +425,8 @@ let lex_identifier (lexer : t) : Token.t * t =
 
   helper lexer (sb_create 16)
 
-let lex_char_literal (lexer : t) (prefix : Token.pp_char_prefix) : Token.t * t =
+let lex_char_literal (lexer : t) (prefix : Token.preprocess_char_prefix) :
+    Token.t * t =
   let rec helper (lexer : t) (sb : string_builder) : Token.t * t =
     match peek_char_view lexer with
     | Some { char = '\''; _ } -> begin
@@ -455,7 +459,7 @@ let lex_char_literal (lexer : t) (prefix : Token.pp_char_prefix) : Token.t * t =
 
   helper lexer (sb_create 2)
 
-let lex_string_literal (lexer : t) (prefix : Token.pp_string_prefix) :
+let lex_string_literal (lexer : t) (prefix : Token.preprocess_string_prefix) :
     Token.t * t =
   let rec helper (lexer : t) (sb : string_builder) : Token.t * t =
     match peek_char_view lexer with
@@ -553,8 +557,8 @@ let lex_token lexer =
               end
           | '_' | 'a' .. 'z' | 'A' .. 'Z' -> lex_identifier prev_lexer
           | '0' .. '9' -> lex_pp_number lexer start_char_view
-          | '\'' -> lex_char_literal lexer None
-          | '"' -> lex_string_literal lexer None
+          | '\'' -> lex_char_literal lexer NoPrefix
+          | '"' -> lex_string_literal lexer NoPrefix
           | _ -> make_token (Token.Invalid (Token.InvalidChar c)) lexer
           end
       end
