@@ -16,13 +16,20 @@ type type_specifier =
   | Double
   | Signed
   | Unsigned
+[@@deriving show]
 
-type type_qualifier = Const | Restrict | Volatile
+type type_qualifier = Const | Restrict | Volatile [@@deriving show]
 
 type type_qualifiers = { const : bool; restrict : bool; volatile : bool }
 [@@deriving show]
 
-type function_specifier = Inline | NoReturn
+type function_specifier = Inline | NoReturn [@@deriving show]
+
+type specifier_qualifier_list = {
+  type_specifiers : (type_specifier * Token.t) list;
+  type_qualifiers : (type_qualifier * Token.t) list; (* TODO: alignment *)
+}
+[@@deriving show]
 
 type declaration_specifiers = {
   storage_classes : (storage_class_specifier * Token.t) list;
@@ -31,22 +38,44 @@ type declaration_specifiers = {
   func_specifiers : (function_specifier * Token.t) list;
 }
 
-type array_size = None | Size of Token.int_literal | Star [@@deriving show]
+type pointers = type_qualifiers list [@@deriving show]
+type array_size = NoSize | Size of Token.int_literal | Star [@@deriving show]
 
-type declarator = {
-  pointers : type_qualifiers list;
-  direct_decl : direct_declarator;
+type array_suffix = {
+  size : array_size;
+  type_qualifiers : type_qualifiers;
+  is_static : bool;
 }
 [@@deriving show]
 
-and direct_declarator =
+type declarator_suffix = ArraySuffix of array_suffix [@@deriving show]
+
+type declarator_base =
   | Identifier of { name : string; info : Token.info }
-  | Array of {
-      decl : direct_declarator;
-      size : array_size;
-      type_qualifiers : type_qualifiers;
-      is_static : bool;
-    }
+  | Declarator of declarator
+[@@deriving show]
+
+and declarator = {
+  pointers : pointers;
+  decl_base : declarator_base;
+  suffixes : declarator_suffix list;
+}
+[@@deriving show]
+
+type abstract_declarator_suffix = ArraySuffix of array_suffix
+[@@deriving show]
+
+type abstract_declarator = {
+  pointers : pointers;
+  decl_base : abstract_declarator option;
+  suffixes : abstract_declarator_suffix list;
+}
+[@@deriving show]
+
+type type_name = {
+  specifier_qualifier_list : specifier_qualifier_list;
+  decl : abstract_declarator option;
+}
 [@@deriving show]
 
 (**)
@@ -56,22 +85,40 @@ val string_of_function_specifier : function_specifier -> string
 
 (**)
 val empty_type_qualifiers : type_qualifiers
+val empty_specifier_qualifier_list : specifier_qualifier_list
 val empty_declaration_specifiers : declaration_specifiers
-val reverse_specs : declaration_specifiers -> declaration_specifiers
 
-val add_storage_class :
+val reverse_specifier_qualifier_list :
+  specifier_qualifier_list -> specifier_qualifier_list
+
+val reverse_declaration_specifiers :
+  declaration_specifiers -> declaration_specifiers
+
+val add_sq_type_specifier :
+  specifier_qualifier_list ->
+  type_specifier ->
+  Token.t ->
+  specifier_qualifier_list
+
+val add_sq_type_qualifier :
+  specifier_qualifier_list ->
+  type_qualifier ->
+  Token.t ->
+  specifier_qualifier_list
+
+val add_decl_storage_class :
   declaration_specifiers ->
   storage_class_specifier ->
   Token.t ->
   declaration_specifiers
 
-val add_type_specifier :
+val add_decl_type_specifier :
   declaration_specifiers -> type_specifier -> Token.t -> declaration_specifiers
 
-val add_type_qualifier :
+val add_decl_type_qualifier :
   declaration_specifiers -> type_qualifier -> Token.t -> declaration_specifiers
 
-val add_function_specifier :
+val add_decl_function_specifier :
   declaration_specifiers ->
   function_specifier ->
   Token.t ->

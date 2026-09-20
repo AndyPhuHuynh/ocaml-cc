@@ -1,31 +1,37 @@
-type header_type = Local | NonLocal
-type header_name = { filepath : string; type_ : header_type }
+type header_type = Local | NonLocal [@@deriving show]
+type header_name = { filepath : string; type_ : header_type } [@@deriving show]
 
 (**)
 type preprocess_char_prefix = NoPrefix | Utf16 | Utf32 | WChar
+[@@deriving show]
 
 type preprocess_char = {
   prefix : preprocess_char_prefix;
   contents : Source.string_src;
 }
+[@@deriving show]
 
 (**)
 type preprocess_string_prefix = NoPrefix | Utf8 | Utf16 | Utf32 | WChar
+[@@deriving show]
 
 type preprocess_string = {
   prefix : preprocess_string_prefix;
   contents : Source.string_src;
 }
+[@@deriving show]
 
 (**)
 type int_suffix = U | L | UL | LL | ULL [@@deriving show]
 
-type int_literal = { value : Bigint.t; suffix : int_suffix option }
+type int_literal = { value : Bignum.Int.t; suffix : int_suffix option }
 [@@deriving show]
 
 (**)
-type float_suffix = F | L
-type float_literal = { value : Q.t; suffix : float_suffix option }
+type float_suffix = F | L [@@deriving show]
+
+type float_literal = { value : Bignum.Float.t; suffix : float_suffix option }
+[@@deriving show]
 
 type invalid =
   | EmptyCharLiteral
@@ -34,6 +40,7 @@ type invalid =
   | UnterminatedHeaderName
   | UnterminatedStringLiteral
   | InvalidChar of char
+[@@deriving show]
 
 type kind_tag =
   (* Preprocessing *)
@@ -148,6 +155,7 @@ type kind_tag =
   | NewLine
   | Eof
   | Invalid
+[@@deriving show]
 
 type kind =
   (* Preprocessing *)
@@ -262,11 +270,12 @@ type kind =
   | NewLine
   | Eof
   | Invalid of invalid
+[@@deriving show]
 
 type info = { span : Source.span; loc : Source.loc; is_at_line_start : bool }
 [@@deriving show]
 
-type t = { kind : kind; info : info }
+type t = { kind : kind; info : info } [@@deriving show]
 
 let tag_of_kind (kind : kind) : kind_tag =
   match kind with

@@ -20,12 +20,14 @@ type preprocess_string = {
 (**)
 type int_suffix = U | L | UL | LL | ULL [@@deriving show]
 
-type int_literal = { value : Bigint.t; suffix : int_suffix option }
+type int_literal = { value : Bignum.Int.t; suffix : int_suffix option }
 [@@deriving show]
 
 (**)
-type float_suffix = F | L
-type float_literal = { value : Q.t; suffix : float_suffix option }
+type float_suffix = F | L [@@deriving show]
+
+type float_literal = { value : Bignum.Float.t; suffix : float_suffix option }
+[@@deriving show]
 
 type invalid =
   | EmptyCharLiteral
@@ -34,6 +36,7 @@ type invalid =
   | UnterminatedHeaderName
   | UnterminatedStringLiteral
   | InvalidChar of char
+[@@deriving show]
 
 type kind_tag =
   (* Preprocessing *)
@@ -148,6 +151,7 @@ type kind_tag =
   | NewLine
   | Eof
   | Invalid
+[@@deriving show]
 
 type kind =
   (* Preprocessing *)
@@ -262,11 +266,12 @@ type kind =
   | NewLine
   | Eof
   | Invalid of invalid
+[@@deriving show]
 
 type info = { span : Source.span; loc : Source.loc; is_at_line_start : bool }
 [@@deriving show]
 
-type t = { kind : kind; info : info }
+type t = { kind : kind; info : info } [@@deriving show]
 
 val tag_of_kind : kind -> kind_tag
 val pp_header_type : Format.formatter -> header_type -> unit

@@ -7,10 +7,13 @@ type t = {
 
 type id [@@deriving show]
 type loc = { line : int; col : int } [@@deriving show]
-type pos = { index : int; loc : loc }
+type pos = { index : int; loc : loc } [@@deriving show]
 type span = { source_id : id; start : int; length : int } [@@deriving show]
-type string_pos = { index : int; loc : loc }
+type string_pos = { index : int; loc : loc } [@@deriving show]
+
 type string_src = { string : string; positions : string_pos list }
+[@@deriving show]
+
 type manager
 type load_file = { display_name : string option; filepath : string }
 type load_error = FileNotFound of string | IOError of string
