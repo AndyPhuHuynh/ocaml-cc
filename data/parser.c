@@ -6,4 +6,6 @@
 
 // const *const *volatile *restrict *[5][10]
 
-int []
+// int []
+
+int (*name[])(int (*)[], int *[](int, char))

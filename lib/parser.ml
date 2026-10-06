@@ -10,6 +10,7 @@ type t = {
 type parse_error = t
 type 'a parse_result = ('a, parse_error) result
 type 'a parse_state_result = (t * 'a, parse_error) result
+type parse_declarator_error = NormalError | NoIdentifier
 
 let create (load_file : Source.load_file) (diagnostics : Diagnostics.engine) :
     (t, Source.load_error) result =
@@ -593,11 +594,71 @@ let parse_declarator_array_suffix (parser : t) :
     parse_after_initial_static (advance parser) initial_token
   else parse_after_no_initial_static parser
 
+(* ----------------------- *)
+(* --- Function Suffix --- *)
+(* ----------------------- *)
+
+let rec parse_parameter_declaration (parser : t) :
+    Syntax.function_param_declaration parse_state_result =
+  let parser, specs = parse_declaration_specifiers parser in
+  match parse_declarator parser false with
+  | Ok (parser, decl) -> Ok (parser, Syntax.Declaration (specs, decl))
+  | Error (_, NoIdentifier) -> begin
+      let next_token = peek parser in
+      match next_token.kind with
+      | Star | LeftParen | LeftBracket -> begin
+          let* parser, decl = parse_abstract_declarator parser in
+          Ok (parser, Syntax.AbstractDeclaration (specs, Some decl))
+        end
+      | _ -> Ok (parser, Syntax.AbstractDeclaration (specs, None))
+    end
+  | Error (parser, _) -> Error parser
+
+and parse_parameter_type_list (parser : t) :
+    Syntax.function_param_type_list parse_state_result =
+  let rec parse_remaining_decls (parser : t)
+      (acc : Syntax.function_param_declaration list) :
+      (Syntax.function_param_declaration list * bool) parse_state_result =
+    let next_parser, next_token = peek_and_advance parser in
+    match next_token.kind with
+    | Comma -> begin
+        let parser_after_comma, token_after_comma =
+          peek_and_advance next_parser
+        in
+        match token_after_comma.kind with
+        | Ellipses -> Ok (parser_after_comma, (List.rev acc, true))
+        | _ -> begin
+            let* parser, decl = parse_parameter_declaration next_parser in
+            parse_remaining_decls parser (decl :: acc)
+          end
+      end
+    | _ -> Ok (parser, (List.rev acc, false))
+  in
+
+  let* parser, first_decl = parse_parameter_declaration parser in
+  let* parser, (remaining_decls, has_ellipses) =
+    parse_remaining_decls parser []
+  in
+  let parameter_type_list : Syntax.function_param_type_list =
+    { declarators = first_decl :: remaining_decls; has_ellipses }
+  in
+
+  Ok (parser, parameter_type_list)
+
+and parse_declarator_function_suffix (parser : t) :
+    Syntax.function_suffix parse_state_result =
+  let* parser, _ = expect parser LeftParen "expected '('" in
+  let* parser, params = parse_parameter_type_list parser in
+  let* parser, _ =
+    expect parser RightParen "expected ')' after function parameters"
+  in
+  Ok (parser, Syntax.ParamList params)
+
 (* ------------------------- *)
 (* --- Declarator Suffix --- *)
 (* ------------------------- *)
 
-let parse_declarator_suffixes (parser : t) :
+and parse_declarator_suffixes (parser : t) :
     Syntax.declarator_suffix list parse_state_result =
   let rec helper (parser : t) (acc : Syntax.declarator_suffix list) :
       Syntax.declarator_suffix list parse_state_result =
@@ -605,6 +666,9 @@ let parse_declarator_suffixes (parser : t) :
     | LeftBracket ->
         let* parser, suffix = parse_declarator_array_suffix parser in
         helper parser (ArraySuffix suffix :: acc)
+    | LeftParen ->
+        let* parser, suffix = parse_declarator_function_suffix parser in
+        helper parser (FunctionSuffix suffix :: acc)
     | _ -> Ok (parser, acc)
   in
   helper parser []
@@ -613,14 +677,17 @@ let parse_declarator_suffixes (parser : t) :
 (* --- Abstract Declarator Suffix --- *)
 (* ---------------------------------- *)
 
-let parse_abstract_declarator_suffixes (parser : t) :
-    Syntax.abstract_declarator_suffix list parse_state_result =
-  let rec helper (parser : t) (acc : Syntax.abstract_declarator_suffix list) :
-      Syntax.abstract_declarator_suffix list parse_state_result =
+and parse_abstract_declarator_suffixes (parser : t) :
+    Syntax.declarator_suffix list parse_state_result =
+  let rec helper (parser : t) (acc : Syntax.declarator_suffix list) :
+      Syntax.declarator_suffix list parse_state_result =
     match (peek parser).kind with
     | LeftBracket ->
         let* parser, suffix = parse_declarator_array_suffix parser in
         helper parser (ArraySuffix suffix :: acc)
+    | LeftParen ->
+        let* parser, suffix = parse_declarator_function_suffix parser in
+        helper parser (FunctionSuffix suffix :: acc)
     | _ -> Ok (parser, acc)
   in
   helper parser []
@@ -629,7 +696,7 @@ let parse_abstract_declarator_suffixes (parser : t) :
 (* --- Type Names --- *)
 (* -------------------*)
 
-let rec parse_abstract_declarator (parser : t) :
+and parse_abstract_declarator (parser : t) :
     Syntax.abstract_declarator parse_state_result =
   let parse_suffixes (parser : t) (pointers : Syntax.pointers) :
       Syntax.abstract_declarator parse_state_result =
@@ -676,7 +743,7 @@ let rec parse_abstract_declarator (parser : t) :
           Ok (parser, decl)
       end
 
-let parse_type_name (parser : t) : Syntax.type_name parse_state_result =
+and parse_type_name (parser : t) : Syntax.type_name parse_state_result =
   let parser, specs = parse_specifier_qualifier_list parser in
   let curr_token = peek parser in
 
@@ -698,8 +765,12 @@ let parse_type_name (parser : t) : Syntax.type_name parse_state_result =
 (* --- Declarations --- *)
 (* ---------------------*)
 
-let parse_declarator (parser : t) : Syntax.declarator parse_state_result =
-  let* parser, pointers = parse_pointer_list parser in
+and parse_declarator (parser : t) (emit_errors : bool) :
+    (t * Syntax.declarator, t * parse_declarator_error) result =
+  let* parser, pointers =
+    parse_pointer_list parser
+    |> Result.map_error (fun parser -> (parser, NormalError))
+  in
 
   let curr_token = peek parser in
   let next_parser = advance parser in
@@ -709,14 +780,31 @@ let parse_declarator (parser : t) : Syntax.declarator parse_state_result =
       let decl_base : Syntax.declarator_base =
         Identifier { name; info = curr_token.info }
       in
-      let* parser, suffixes = parse_declarator_suffixes next_parser in
+      let* parser, suffixes =
+        parse_declarator_suffixes next_parser
+        |> Result.map_error (fun parser -> (parser, NormalError))
+      in
       let decl : Syntax.declarator = { pointers; decl_base; suffixes } in
       Ok (parser, decl)
     end
-  (* TODO: handle nested declarators with ( *)
+  | LeftParen -> begin
+      let* parser, decl_base = parse_declarator next_parser emit_errors in
+      let decl_base : Syntax.declarator_base = Declarator decl_base in
+      let* parser, _ =
+        expect parser RightParen "expect ')'"
+        |> Result.map_error (fun parser -> (parser, NormalError))
+      in
+      let* parser, suffixes =
+        parse_declarator_suffixes parser
+        |> Result.map_error (fun parser -> (parser, NormalError))
+      in
+      let decl : Syntax.declarator = { pointers; decl_base; suffixes } in
+      Ok (parser, decl)
+    end
   | _ ->
-      emit_error_token_span parser curr_token "expected identifier or '('";
-      Error parser
+      if emit_errors then
+        emit_error_token_span parser curr_token "expected identifier or '('";
+      Error (parser, NoIdentifier)
 
 let parse_declaration (parser : t) : Ast.declaration parse_state_result =
   let parser, declaration_specifiers = parse_declaration_specifiers parser in
@@ -731,10 +819,13 @@ let parse_declaration (parser : t) : Ast.declaration parse_state_result =
     analyze_function_specifiers parser declaration_specifiers.func_specifiers
   in
 
-  let* parser, decl = parse_declarator parser in
+  let* parser, decl =
+    parse_declarator parser true
+    |> Result.map_error (fun decl_error ->
+        match decl_error with parser, _ -> parser)
+  in
 
   print_endline (Syntax.show_declarator decl);
-
   let ast : Ast.declaration =
     FunctionDeclaration
       {
@@ -749,7 +840,7 @@ let parse_declaration (parser : t) : Ast.declaration parse_state_result =
   Ok (parser, ast)
 
 let parse_translation_unit (parser : t) : unit =
-  (* match parse_declaration parser with Ok _ -> () | Error _ -> () *)
-  match parse_type_name parser with
-  | Ok _ -> ()
-  | Error _ -> ()
+  match parse_declaration parser with Ok _ -> () | Error _ -> ()
+(* match parse_type_name parser with *)
+(* | Ok _ -> () *)
+(* | Error _ -> () *)

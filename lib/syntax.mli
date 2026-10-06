@@ -5,6 +5,7 @@ type storage_class_specifier =
   | ThreadLocal
   | Auto
   | Register
+[@@deriving show]
 
 type type_specifier =
   | Void
@@ -37,6 +38,7 @@ type declaration_specifiers = {
   type_qualifiers : (type_qualifier * Token.t) list;
   func_specifiers : (function_specifier * Token.t) list;
 }
+[@@deriving show]
 
 type pointers = type_qualifiers list [@@deriving show]
 type array_size = NoSize | Size of Token.int_literal | Star [@@deriving show]
@@ -48,9 +50,30 @@ type array_suffix = {
 }
 [@@deriving show]
 
-type declarator_suffix = ArraySuffix of array_suffix [@@deriving show]
+type function_param_declaration =
+  | Declaration of declaration_specifiers * declarator
+  | AbstractDeclaration of declaration_specifiers * abstract_declarator option
+[@@deriving show]
 
-type declarator_base =
+and function_param_type_list = {
+  declarators : function_param_declaration list;
+  has_ellipses : bool;
+}
+[@@deriving show]
+
+and function_identifier_list = { identifiers : string list } [@@deriving show]
+
+and function_suffix =
+  | ParamList of function_param_type_list
+  | IdentList of function_identifier_list
+[@@deriving show]
+
+and declarator_suffix =
+  | ArraySuffix of array_suffix
+  | FunctionSuffix of function_suffix
+[@@deriving show]
+
+and declarator_base =
   | Identifier of { name : string; info : Token.info }
   | Declarator of declarator
 [@@deriving show]
@@ -62,13 +85,10 @@ and declarator = {
 }
 [@@deriving show]
 
-type abstract_declarator_suffix = ArraySuffix of array_suffix
-[@@deriving show]
-
-type abstract_declarator = {
+and abstract_declarator = {
   pointers : pointers;
   decl_base : abstract_declarator option;
-  suffixes : abstract_declarator_suffix list;
+  suffixes : declarator_suffix list;
 }
 [@@deriving show]
 
