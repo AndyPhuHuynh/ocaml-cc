@@ -126,11 +126,48 @@ let expect_int_literal (parser : t) (message : string) :
       match token.kind with IntLiteral s -> Some (s, token.info) | _ -> None)
     message
 
+(* ----------------------- *)
+(* --- Type Specifiers --- *)
+(* ----------------------- *)
+
+(* TODO: enum, typedef-name *)
+let rec is_token_type_specifier (kind : Token.kind) : bool =
+  match kind with
+  | Void | Char | Short | Int | Long | Float | Double | Signed | Unsigned | Bool
+  | Complex | Atomic | Struct | Union ->
+      true
+  | _ -> false
+
+and parse_type_specifier (parser : t) : Syntax.type_specifier parse_state_result
+    =
+  let next_parser, next_token = peek_and_advance parser in
+  match next_token.kind with
+  | Void -> Ok (next_parser, Void)
+  | Char -> Ok (next_parser, Char)
+  | Short -> Ok (next_parser, Short)
+  | Int -> Ok (next_parser, Int)
+  | Long -> Ok (next_parser, Long)
+  | Float -> Ok (next_parser, Float)
+  | Double -> Ok (next_parser, Double)
+  | Signed -> Ok (next_parser, Signed)
+  | Unsigned -> Ok (next_parser, Unsigned)
+  | Bool -> Ok (next_parser, Bool)
+  | Complex -> Ok (next_parser, Complex)
+  | Atomic -> begin
+      let* parser, _ = expect next_parser LeftParen "expect '('" in
+      let* parser, type_name = parse_type_name parser in
+      let* parser, _ = expect parser RightParen "expect ')'" in
+      Ok (parser, Syntax.Atomic type_name)
+    end
+  | _ ->
+      emit_warning_token_loc parser next_token "expected type specifier";
+      Error parser
+
 (* --------------------------- *)
 (* --- Type Qualifier List --- *)
 (* --------------------------- *)
 
-let analyze_type_qualifiers (parser : t)
+and analyze_type_qualifiers (parser : t)
     (specs : (Syntax.type_qualifier * Token.t) list) : Syntax.type_qualifiers =
   let warn_duplicate (spec : Syntax.type_qualifier) (token : Token.t) : unit =
     emit_warning_token_span parser token
@@ -161,7 +198,7 @@ let analyze_type_qualifiers (parser : t)
   in
   helper specs Syntax.empty_type_qualifiers
 
-let parse_type_qualifier_list (parser : t) : t * Syntax.type_qualifiers =
+and parse_type_qualifier_list (parser : t) : t * Syntax.type_qualifiers =
   let rec helper (parser : t) (acc : (Syntax.type_qualifier * Token.t) list) :
       t * Syntax.type_qualifiers =
     let token = peek parser in
@@ -178,12 +215,12 @@ let parse_type_qualifier_list (parser : t) : t * Syntax.type_qualifiers =
 (* --- Pointers --- *)
 (* ---------------- *)
 
-let parse_pointer (parser : t) : Syntax.type_qualifiers parse_state_result =
+and parse_pointer (parser : t) : Syntax.type_qualifiers parse_state_result =
   let* parser, _ = expect parser Token.Star "expected pointer" in
   let parser, qualifiers = parse_type_qualifier_list parser in
   Ok (parser, qualifiers)
 
-let parse_pointer_list (parser : t) :
+and parse_pointer_list (parser : t) :
     Syntax.type_qualifiers list parse_state_result =
   let rec helper (parser : t) (acc : Syntax.type_qualifiers list) :
       Syntax.type_qualifiers list parse_state_result =
@@ -201,46 +238,38 @@ let parse_pointer_list (parser : t) :
 (* --- Specifier Qualifier List --- *)
 (* -------------------------------- *)
 
-let parse_specifier_qualifier_list (parser : t) :
-    t * Syntax.specifier_qualifier_list =
+and parse_specifier_qualifier_list (parser : t) :
+    Syntax.specifier_qualifier_list parse_state_result =
   let rec helper (parser : t) (acc : Syntax.specifier_qualifier_list) :
-      t * Syntax.specifier_qualifier_list =
+      Syntax.specifier_qualifier_list parse_state_result =
     let token = peek parser in
     let next_parser = advance parser in
     match token.kind with
     (* type specifiers *)
-    | Void -> helper next_parser (Syntax.add_sq_type_specifier acc Void token)
-    | Char -> helper next_parser (Syntax.add_sq_type_specifier acc Char token)
-    | Short -> helper next_parser (Syntax.add_sq_type_specifier acc Short token)
-    | Int -> helper next_parser (Syntax.add_sq_type_specifier acc Int token)
-    | Long -> helper next_parser (Syntax.add_sq_type_specifier acc Long token)
-    | Float -> helper next_parser (Syntax.add_sq_type_specifier acc Float token)
-    | Double ->
-        helper next_parser (Syntax.add_sq_type_specifier acc Double token)
-    | Signed ->
-        helper next_parser (Syntax.add_sq_type_specifier acc Signed token)
-    | Unsigned ->
-        helper next_parser (Syntax.add_sq_type_specifier acc Unsigned token)
+    | _ when is_token_type_specifier token.kind -> begin
+        let* parser, type_specifier = parse_type_specifier parser in
+        helper parser (Syntax.add_sq_type_specifier acc type_specifier token)
+      end
     (* type qualifiers *)
     | Const -> helper next_parser (Syntax.add_sq_type_qualifier acc Const token)
     | Restrict ->
         helper next_parser (Syntax.add_sq_type_qualifier acc Restrict token)
     | Volatile ->
         helper next_parser (Syntax.add_sq_type_qualifier acc Volatile token)
-    | _ -> (parser, acc)
+    | _ -> Ok (parser, acc)
   in
 
-  let parser, specs = helper parser Syntax.empty_specifier_qualifier_list in
-  (parser, Syntax.reverse_specifier_qualifier_list specs)
+  let* parser, specs = helper parser Syntax.empty_specifier_qualifier_list in
+  Ok (parser, Syntax.reverse_specifier_qualifier_list specs)
 
 (* ------------------------------ *)
 (* --- Declaration Specifiers --- *)
 (* ------------------------------ *)
 
-let parse_declaration_specifiers (parser : t) :
-    t * Syntax.declaration_specifiers =
+and parse_declaration_specifiers (parser : t) :
+    Syntax.declaration_specifiers parse_state_result =
   let rec helper (parser : t) (acc : Syntax.declaration_specifiers) :
-      t * Syntax.declaration_specifiers =
+      Syntax.declaration_specifiers parse_state_result =
     let token = peek parser in
     let next_parser = advance parser in
     match token.kind with
@@ -257,20 +286,10 @@ let parse_declaration_specifiers (parser : t) :
     | Register ->
         helper next_parser (Syntax.add_decl_storage_class acc Register token)
     (* type specifiers *)
-    | Void -> helper next_parser (Syntax.add_decl_type_specifier acc Void token)
-    | Char -> helper next_parser (Syntax.add_decl_type_specifier acc Char token)
-    | Short ->
-        helper next_parser (Syntax.add_decl_type_specifier acc Short token)
-    | Int -> helper next_parser (Syntax.add_decl_type_specifier acc Int token)
-    | Long -> helper next_parser (Syntax.add_decl_type_specifier acc Long token)
-    | Float ->
-        helper next_parser (Syntax.add_decl_type_specifier acc Float token)
-    | Double ->
-        helper next_parser (Syntax.add_decl_type_specifier acc Double token)
-    | Signed ->
-        helper next_parser (Syntax.add_decl_type_specifier acc Signed token)
-    | Unsigned ->
-        helper next_parser (Syntax.add_decl_type_specifier acc Unsigned token)
+    | _ when is_token_type_specifier token.kind -> begin
+        let* parser, type_specifier = parse_type_specifier parser in
+        helper parser (Syntax.add_decl_type_specifier acc type_specifier token)
+      end
     (* type qualifiers *)
     | Const ->
         helper next_parser (Syntax.add_decl_type_qualifier acc Const token)
@@ -278,13 +297,13 @@ let parse_declaration_specifiers (parser : t) :
         helper next_parser (Syntax.add_decl_type_qualifier acc Restrict token)
     | Volatile ->
         helper next_parser (Syntax.add_decl_type_qualifier acc Volatile token)
-    | _ -> (parser, acc)
+    | _ -> Ok (parser, acc)
   in
 
-  let parser, specs = helper parser Syntax.empty_declaration_specifiers in
-  (parser, Syntax.reverse_declaration_specifiers specs)
+  let* parser, specs = helper parser Syntax.empty_declaration_specifiers in
+  Ok (parser, Syntax.reverse_declaration_specifiers specs)
 
-let analyze_storage_classes (parser : t)
+and analyze_storage_classes (parser : t)
     (specs : (Syntax.storage_class_specifier * Token.t) list) :
     (Syntax.storage_class_specifier * Token.t) option
     * (Syntax.storage_class_specifier * Token.t) option =
@@ -358,7 +377,7 @@ let analyze_storage_classes (parser : t)
   in
   validate None None SpecSet.empty specs
 
-let analyze_object_storage_classes (parser : t)
+and analyze_object_storage_classes (parser : t)
     (specs : (Syntax.storage_class_specifier * Token.t) list) :
     Ast.object_storage =
   match analyze_storage_classes parser specs with
@@ -400,7 +419,7 @@ let analyze_object_storage_classes (parser : t)
            (Syntax.string_of_storage_class_specifier (fst first))
            (Syntax.string_of_storage_class_specifier (fst second)))
 
-let analyze_function_storage_classes (parser : t)
+and analyze_function_storage_classes (parser : t)
     (specs : (Syntax.storage_class_specifier * Token.t) list) :
     Ast.function_storage =
   let emit_storage_class_error (spec : Syntax.storage_class_specifier)
@@ -455,7 +474,7 @@ let analyze_function_storage_classes (parser : t)
            (Syntax.string_of_storage_class_specifier (fst first))
            (Syntax.string_of_storage_class_specifier (fst second)))
 
-let analyze_typedef_storage_classes (parser : t)
+and analyze_typedef_storage_classes (parser : t)
     (specs : (Syntax.storage_class_specifier * Token.t) list) : unit =
   let get_spec_string (spec : (Syntax.storage_class_specifier * Token.t) option)
       : string =
@@ -477,7 +496,7 @@ let analyze_typedef_storage_classes (parser : t)
             class specifier configuration: (%s, %s)"
            (get_spec_string spec1) (get_spec_string spec2))
 
-let analyze_function_specifiers (parser : t)
+and analyze_function_specifiers (parser : t)
     (specs : (Syntax.function_specifier * Token.t) list) :
     Ast.function_specifiers =
   let warn_duplicate (spec : Syntax.function_specifier) (token : Token.t) : unit
@@ -517,7 +536,7 @@ let analyze_function_specifiers (parser : t)
 [ type-qualifier-list-opt * ] 
 *)
 
-let parse_declarator_array_suffix (parser : t) :
+and parse_declarator_array_suffix (parser : t) :
     Syntax.array_suffix parse_state_result =
   let emit_static_with_unspecified_length parser static_token =
     emit_error_token_loc parser static_token
@@ -598,9 +617,9 @@ let parse_declarator_array_suffix (parser : t) :
 (* --- Function Suffix --- *)
 (* ----------------------- *)
 
-let rec parse_parameter_declaration (parser : t) :
+and parse_parameter_declaration (parser : t) :
     Syntax.function_param_declaration parse_state_result =
-  let parser, specs = parse_declaration_specifiers parser in
+  let* parser, specs = parse_declaration_specifiers parser in
   match parse_declarator parser false with
   | Ok (parser, decl) -> Ok (parser, Syntax.Declaration (specs, decl))
   | Error (_, NoIdentifier) -> begin
@@ -744,7 +763,7 @@ and parse_abstract_declarator (parser : t) :
       end
 
 and parse_type_name (parser : t) : Syntax.type_name parse_state_result =
-  let parser, specs = parse_specifier_qualifier_list parser in
+  let* parser, specs = parse_specifier_qualifier_list parser in
   let curr_token = peek parser in
 
   let* (parser, decl) : t * Syntax.abstract_declarator option =
@@ -758,7 +777,6 @@ and parse_type_name (parser : t) : Syntax.type_name parse_state_result =
   let type_name : Syntax.type_name =
     { specifier_qualifier_list = specs; decl }
   in
-  print_endline (Syntax.show_type_name type_name);
   Ok (parser, type_name)
 
 (* ---------------------*)
@@ -807,7 +825,7 @@ and parse_declarator (parser : t) (emit_errors : bool) :
       Error (parser, NoIdentifier)
 
 let parse_declaration (parser : t) : Ast.declaration parse_state_result =
-  let parser, declaration_specifiers = parse_declaration_specifiers parser in
+  let* parser, declaration_specifiers = parse_declaration_specifiers parser in
   let _ =
     analyze_function_storage_classes parser
       declaration_specifiers.storage_classes
@@ -825,6 +843,7 @@ let parse_declaration (parser : t) : Ast.declaration parse_state_result =
         match decl_error with parser, _ -> parser)
   in
 
+  print_endline (Syntax.show_declaration_specifiers declaration_specifiers);
   print_endline (Syntax.show_declarator decl);
   let ast : Ast.declaration =
     FunctionDeclaration

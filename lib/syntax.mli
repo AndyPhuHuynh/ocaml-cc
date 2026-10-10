@@ -17,22 +17,25 @@ type type_specifier =
   | Double
   | Signed
   | Unsigned
+  | Bool
+  | Complex
+  | Atomic of type_name
 [@@deriving show]
 
-type type_qualifier = Const | Restrict | Volatile [@@deriving show]
+and type_qualifier = Const | Restrict | Volatile [@@deriving show]
 
-type type_qualifiers = { const : bool; restrict : bool; volatile : bool }
+and type_qualifiers = { const : bool; restrict : bool; volatile : bool }
 [@@deriving show]
 
-type function_specifier = Inline | NoReturn [@@deriving show]
+and function_specifier = Inline | NoReturn [@@deriving show]
 
-type specifier_qualifier_list = {
+and specifier_qualifier_list = {
   type_specifiers : (type_specifier * Token.t) list;
   type_qualifiers : (type_qualifier * Token.t) list; (* TODO: alignment *)
 }
 [@@deriving show]
 
-type declaration_specifiers = {
+and declaration_specifiers = {
   storage_classes : (storage_class_specifier * Token.t) list;
   type_specifiers : (type_specifier * Token.t) list;
   type_qualifiers : (type_qualifier * Token.t) list;
@@ -40,17 +43,17 @@ type declaration_specifiers = {
 }
 [@@deriving show]
 
-type pointers = type_qualifiers list [@@deriving show]
-type array_size = NoSize | Size of Token.int_literal | Star [@@deriving show]
+and pointers = type_qualifiers list [@@deriving show]
+and array_size = NoSize | Size of Token.int_literal | Star [@@deriving show]
 
-type array_suffix = {
+and array_suffix = {
   size : array_size;
   type_qualifiers : type_qualifiers;
   is_static : bool;
 }
 [@@deriving show]
 
-type function_param_declaration =
+and function_param_declaration =
   | Declaration of declaration_specifiers * declarator
   | AbstractDeclaration of declaration_specifiers * abstract_declarator option
 [@@deriving show]
@@ -92,7 +95,7 @@ and abstract_declarator = {
 }
 [@@deriving show]
 
-type type_name = {
+and type_name = {
   specifier_qualifier_list : specifier_qualifier_list;
   decl : abstract_declarator option;
 }

@@ -8,4 +8,6 @@
 
 // int []
 
-int (*name[])(int (*)[], int *[](int, char))
+// int (*name[])(int (*)[], int *[](int, char))
+
+_Atomic (int) _Atomic (unsigned) x;
